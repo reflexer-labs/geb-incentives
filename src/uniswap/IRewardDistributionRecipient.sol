@@ -32,18 +32,17 @@
 * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 */
 
-
 pragma solidity ^0.6.7;
 
 import "../zeppelin/access/Ownable.sol";
 
-contract IRewardDistributionRecipient is Ownable {
+abstract contract IRewardDistributionRecipient is Ownable {
     address public rewardDistribution;
 
-    function notifyRewardAmount(uint256 reward) external;
+    function notifyRewardAmount(uint256 reward) virtual external;
 
     modifier onlyRewardDistribution() {
-        require(_msgSender() == rewardDistribution, "Caller is not reward distribution");
+        require(_msgSender() == rewardDistribution, "IRewardDistributionRecipient/caller-is-not-reward-distribution");
         _;
     }
 
