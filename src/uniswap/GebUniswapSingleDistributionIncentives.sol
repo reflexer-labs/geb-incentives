@@ -120,7 +120,7 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
     }
 
     // --- Administration ---
-    function modifyParameters(bytes32 parameter, uint256 val) external onlyOwner {
+    function modifyParameters(bytes32 parameter, uint256 val) external isAuthority {
         require(now < startTime, "GebUniswapSingleDistributionIncentives/surpassed-start-time");
         if (parameter == "startTime") {
           require(val > now, "GebUniswapSingleDistributionIncentives/invali-new-start-time");
@@ -137,7 +137,7 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
           instantExitPercentage = val;
         } else revert("GebUniswapSingleDistributionIncentives/modify-unrecognized-param");
     }
-    function withdrawExtraRewardTokens() external onlyOwner {
+    function withdrawExtraRewardTokens() external isAuthority {
         require(rewardToken.balanceOf(address(this)) > globalReward, "GebUniswapSingleDistributionIncentives/does-not-exceed-global-reward");
         uint amountToWithdraw = sub(rewardToken.balanceOf(address(this)), globalReward);
         safeTransfer(rewardToken, msg.sender, amountToWithdraw);
