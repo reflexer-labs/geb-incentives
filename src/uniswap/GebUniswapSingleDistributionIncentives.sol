@@ -160,7 +160,7 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
             );
     }
 
-    function earned(address account) public view returns (uint256) {
+    function earned(address account) public view returns (uint256) { // note: precision seems off, check.
         return add(div(mul(balanceOf(account), sub(rewardPerToken(), userRewardPerTokenPaid[account])), 1e18), rewards[account]);
     }
 
@@ -171,8 +171,8 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
         emit Staked(msg.sender, amount);
     }
 
-    function withdraw(uint256 amount) override public updateReward(msg.sender) checkStart {
-        require(amount > 0, "GebUniswapSingleDistributionIncentives/cannot-withdraw-zero");
+    function withdraw(uint256 amount) override public updateReward(msg.sender) checkStart { // note: no need to checkStart here
+        require(amount > 0, "GebUniswapSingleDistributionIncentives/cannot-withdraw-zero"); // bug: no cooldown on withdraws and getReward?
         super.withdraw(amount);
         emit Withdrawn(msg.sender, amount);
     }
@@ -187,7 +187,7 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
         getReward();
     }
 
-    function exit(address account, uint timestamp) external {
+    function exit(address account, uint timestamp) external { // note: new, check
         require(delayedRewards[account][timestamp].totalAmount > 0, "GebUniswapSingleDistributionIncentives/invalid-slot");
         require(
           delayedRewards[account][timestamp].totalAmount > delayedRewards[account][timestamp].exitedAmount,
