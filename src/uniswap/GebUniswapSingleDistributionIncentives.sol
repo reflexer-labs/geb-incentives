@@ -44,10 +44,9 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
     IERC20  public rewardToken;
 
     uint256 public globalReward;
-    uint256 public DURATION;
+    uint256 public rewardsDuration;
     uint256 public startTime;
     uint256 public periodFinish;
-    uint256 public exitCooldown;
     uint256 public instantExitPercentage;
     uint256 public rewardDelay;
     uint256 public rewardRate;
@@ -56,7 +55,6 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
 
     mapping(address => uint256)                           public userRewardPerTokenPaid;
     mapping(address => uint256)                           public rewards;
-    mapping(address => uint256)                           public lastExitTime;
     mapping(address => mapping(uint256 => DelayedReward)) public delayedRewards;
 
     uint256 constant public THOUSAND = 1000;
@@ -94,29 +92,22 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
     constructor(
         address lpToken_,
         address rewardToken_,
-        uint256 DURATION_,
+        uint256 rewardsDuration_,
         uint256 startTime_,
-        uint256 exitCooldown_,
         uint256 rewardDelay_,
         uint256 instantExitPercentage_
     ) public {
         require(lpToken_ != address(0), "GebUniswapSingleDistributionIncentives/invalid-lp-token");
         require(rewardToken_ != address(0), "GebUniswapSingleDistributionIncentives/invalid-reward-token");
-        require(DURATION_ > 0, "GebUniswapSingleDistributionIncentives/invalid-duration");
+        require(rewardsDuration_ > 0, "GebUniswapSingleDistributionIncentives/invalid-duration");
         require(startTime_ > now, "GebUniswapSingleDistributionIncentives/invalid-start-time");
         require(instantExitPercentage_ <= THOUSAND, "GebUniswapSingleDistributionIncentives/");
         lpToken               = IERC20(lpToken_);
         rewardToken           = IERC20(rewardToken_);
-        DURATION              = DURATION_;
+        rewardsDuration       = rewardsDuration_;
         startTime             = startTime_;
-        exitCooldown          = exitCooldown_;
         rewardDelay           = rewardDelay_;
         instantExitPercentage = instantExitPercentage_;
-    }
-
-    // --- Boolean Logic ---
-    function either(bool x, bool y) internal pure returns (bool z) {
-        assembly{ z := or(x, y)}
     }
 
     // --- Administration ---
@@ -125,11 +116,8 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
         if (parameter == "startTime") {
           require(val > now, "GebUniswapSingleDistributionIncentives/invali-new-start-time");
           startTime = val;
-        } else if (parameter == "DURATION") {
-          require(val > 0, "GebUniswapSingleDistributionIncentives/invalid-new-duration"); // note: unnecessary
-          DURATION = val;
-        } else if (parameter == "exitCooldown") { 
-          exitCooldown = val;
+        } else if (parameter == "rewardsDuration") {
+          rewardsDuration = val;
         } else if (parameter == "rewardDelay") { 
           rewardDelay = val;
         } else if (parameter == "instantExitPercentage") {
@@ -160,7 +148,7 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
             );
     }
 
-    function earned(address account) public view returns (uint256) { // note: precision seems off, check.
+    function earned(address account) public view returns (uint256) { 
         return add(div(mul(balanceOf(account), sub(rewardPerToken(), userRewardPerTokenPaid[account])), 1e18), rewards[account]);
     }
 
@@ -171,23 +159,18 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
         emit Staked(msg.sender, amount);
     }
 
-    function withdraw(uint256 amount) override public updateReward(msg.sender) checkStart { // note: no need to checkStart here
+    function withdraw(uint256 amount) override public updateReward(msg.sender) { 
         require(amount > 0, "GebUniswapSingleDistributionIncentives/cannot-withdraw-zero"); 
         super.withdraw(amount);
         emit Withdrawn(msg.sender, amount);
     }
 
     function exit() external {
-        require(
-          either(lastExitTime[msg.sender] == 0, sub(now, lastExitTime[msg.sender]) >= exitCooldown), // bug: user can circumvent exit cooldown by calling directly withdraw and getReward
-          "GebUniswapSingleDistributionIncentives/wait-more"
-        );
-        lastExitTime[msg.sender] = now;
         withdraw(balanceOf(msg.sender));
         getReward();
     }
 
-    function getLockedReward(address account, uint timestamp) external { // note: changed to getLockedReward
+    function getLockedReward(address account, uint timestamp) external { 
         require(delayedRewards[account][timestamp].totalAmount > 0, "GebUniswapSingleDistributionIncentives/invalid-slot");
         require(
           delayedRewards[account][timestamp].totalAmount > delayedRewards[account][timestamp].exitedAmount,
@@ -197,13 +180,15 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
         require(timeElapsedSinceLastExit > 0, "GebUniswapSingleDistributionIncentives/invalid-time-elapsed");
         uint amountToExit;
         if (now >= add(timestamp, rewardDelay)) {
-          amountToExit = sub(delayedRewards[account][timestamp].totalAmount, delayedRewards[account][timestamp].exitedAmount);
+            amountToExit = sub(delayedRewards[account][timestamp].totalAmount, delayedRewards[account][timestamp].exitedAmount);
         } else {
-          amountToExit = mul(div(mul(timeElapsedSinceLastExit, 100), rewardDelay), delayedRewards[account][timestamp].totalAmount) / 100; // bug: users can bypass the vesting by withdrawing multiple times
+            amountToExit = mul(div(mul(timeElapsedSinceLastExit, 100), rewardDelay), delayedRewards[account][timestamp].totalAmount) / 100; // bug: users can bypass the vesting by withdrawing multiple times
         }
+        delayedRewards[account][timestamp].latestExitTime = now;
         delayedRewards[account][timestamp].exitedAmount = add(delayedRewards[account][timestamp].exitedAmount, amountToExit);
         if (amountToExit > 0) {
-          safeTransfer(rewardToken, account, amountToExit);
+            safeTransfer(rewardToken, account, amountToExit);
+            globalReward = sub(globalReward,amountToExit);
         }
     }
 
@@ -215,11 +200,12 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
         uint256 instantReward = mul(totalReward, instantExitPercentage) / THOUSAND;
         uint256 totalDelayedReward = sub(totalReward, instantReward);
         if (totalDelayedReward > 0) {
-          delayedRewards[msg.sender][now] = DelayedReward(totalDelayedReward, 0, now);
-          emit DelayReward(msg.sender, now, totalDelayedReward);
+            delayedRewards[msg.sender][now] = DelayedReward(totalDelayedReward, 0, now);
+            emit DelayReward(msg.sender, now, totalDelayedReward);
         }
         if (instantReward > 0) {
             safeTransfer(rewardToken, msg.sender, instantReward);
+            globalReward = sub(globalReward, instantReward);
             emit RewardPaid(msg.sender, instantReward);
         }
     }
@@ -230,23 +216,23 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
         onlyRewardDistribution
         updateReward(address(0))
     {
-        if (block.timestamp > startTime) { 
+        if (block.timestamp > startTime) {  // note: test
           require(block.timestamp < periodFinish, "GebUniswapSingleDistributionIncentives/passed-period-finish"); // note: unlike on the original, once the distribution is over it cannot restart
 
           uint256 remaining = sub(periodFinish, block.timestamp);
           uint256 leftover = mul(remaining, rewardRate);
-          rewardRate = div(add(reward, leftover), DURATION);
-          globalReward = add(reward, leftover); // note: enforce token balance?
-
+          rewardRate = div(add(reward, leftover), rewardsDuration);
           lastUpdateTime = block.timestamp;
-          periodFinish = add(block.timestamp, DURATION);
-          emit RewardAdded(reward);
+          globalReward = add(globalReward, leftover);
         } else {
-          rewardRate = div(reward, DURATION);
+          rewardRate = div(reward, rewardsDuration);
+          periodFinish = add(startTime, rewardsDuration);
           lastUpdateTime = startTime;
-          periodFinish = add(startTime, DURATION);
-          globalReward = reward; // note: enforce token balance?
-          emit RewardAdded(reward);  
+          globalReward = reward;
         }
+
+        emit RewardAdded(reward);
+        uint balance = rewardToken.balanceOf(address(this));
+        require(rewardRate <= div(balance,rewardsDuration), "Provided reward too high");        
     }
 }
