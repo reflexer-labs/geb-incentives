@@ -38,8 +38,9 @@ import "./IRewardDistributionRecipient.sol";
 import "../lp/LPTokenWrapper.sol";
 
 import "../zeppelin/math/Math.sol";
+import "../zeppelin/utils/ReentrancyGuard.sol";
 
-contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient, LPTokenWrapper, Math {
+contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient, LPTokenWrapper, Math, ReentrancyGuard {
     // --- Variables ---
     IERC20  public rewardToken;
 
@@ -153,13 +154,13 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
     }
 
     // stake visibility is public as overriding LPTokenWrapper's stake() function
-    function stake(uint256 amount) override public updateReward(msg.sender) checkStart {
+    function stake(uint256 amount) override public updateReward(msg.sender) checkStart nonReentrant {
         require(amount > 0, "GebUniswapSingleDistributionIncentives/cannot-stake-zero");
         super.stake(amount);
         emit Staked(msg.sender, amount);
     }
 
-    function withdraw(uint256 amount) override public updateReward(msg.sender) { 
+    function withdraw(uint256 amount) override public updateReward(msg.sender) nonReentrant { 
         require(amount > 0, "GebUniswapSingleDistributionIncentives/cannot-withdraw-zero"); 
         super.withdraw(amount);
         emit Withdrawn(msg.sender, amount);
@@ -170,7 +171,7 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
         getReward();
     }
 
-    function getLockedReward(address account, uint timestamp) external { 
+    function getLockedReward(address account, uint timestamp) external nonReentrant { 
         require(delayedRewards[account][timestamp].totalAmount > 0, "GebUniswapSingleDistributionIncentives/invalid-slot");
         require(
           delayedRewards[account][timestamp].totalAmount > delayedRewards[account][timestamp].exitedAmount,
@@ -192,7 +193,7 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
         }
     }
 
-    function getReward() public updateReward(msg.sender) checkStart {
+    function getReward() public updateReward(msg.sender) checkStart nonReentrant {
         uint256 totalReward = earned(msg.sender);
         if (totalReward > 0) {
             rewards[msg.sender] = 0;
