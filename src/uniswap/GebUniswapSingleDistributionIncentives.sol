@@ -254,6 +254,6 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
 
         emit RewardAdded(reward);
         uint balance = rewardToken.balanceOf(address(this));
-        require(rewardRate <= div(balance,rewardsDuration), "Provided reward too high");        
+        require(rewardRate <= div(balance,rewardsDuration), "GebUniswapSingleDistributionIncentives/Provided-reward-too-high");        
     }
 }
