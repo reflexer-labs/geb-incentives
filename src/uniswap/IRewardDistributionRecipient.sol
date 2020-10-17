@@ -34,21 +34,21 @@
 
 pragma solidity ^0.6.7;
 
-import "../zeppelin/access/Ownable.sol";
+import "./Auth.sol";
 
-abstract contract IRewardDistributionRecipient is Ownable {
+abstract contract IRewardDistributionRecipient is Auth {
     address public rewardDistribution;
 
     function notifyRewardAmount(uint256 reward) virtual external;
 
     modifier onlyRewardDistribution() {
-        require(_msgSender() == rewardDistribution, "IRewardDistributionRecipient/caller-is-not-reward-distribution");
+        require(msg.sender == rewardDistribution, "IRewardDistributionRecipient/caller-is-not-reward-distribution");
         _;
     }
 
     function setRewardDistribution(address _rewardDistribution)
         external
-        onlyOwner
+        isAuthority
     {
         rewardDistribution = _rewardDistribution;
     }
