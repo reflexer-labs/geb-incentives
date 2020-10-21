@@ -242,7 +242,6 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
     )
         external
         onlyRewardDistribution
-        // updateReward(address(0))
     {
         require(reward > 0, "GebUniswapRollingDistributionIncentives/invalid-reward");
         require(startTime >= block.timestamp, "GebUniswapRollingDistributionIncentives/startTime-in-the-past");
