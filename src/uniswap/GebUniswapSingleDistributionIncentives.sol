@@ -112,6 +112,9 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
     }
 
     // --- Administration ---
+    /// @notice Modify Global parameters (only authed)
+    /// @param parameter Parameter to be changed
+    /// @param val new parameter value
     function modifyParameters(bytes32 parameter, uint256 val) external isAuthority {
         require(now < startTime, "GebUniswapSingleDistributionIncentives/surpassed-start-time");
         if (parameter == "startTime") {
@@ -230,6 +233,7 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
     }
 
     /// @notice Notify distribution amount
+    /// @param reward Reward amount
     function notifyRewardAmount(uint256 reward)
         external
         onlyRewardDistribution

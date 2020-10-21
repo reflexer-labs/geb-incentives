@@ -47,8 +47,6 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
     uint256 public globalReward;
     uint256 public lastFinish;
     uint256 public campaignCount;
-    uint256 public instantExitPercentage;
-    uint256 public rewardDelay;
 
     mapping(address => mapping(uint256 => DelayedReward)) public delayedRewards;
     mapping(uint => Campaign)                             public campaigns;
@@ -70,16 +68,18 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
         uint finish;
         uint lastUpdateTime;
         uint rewardPerTokenStored;
+        uint rewardDelay;
+        uint instantExitPercentage;
         mapping(address => uint256) rewards;
         mapping(address => uint256) userRewardPerTokenPaid;
     }
 
     // --- Events ---
-    event CampaignAdded(uint256 campaign);
+    event CampaignAdded(uint256 campaignId);
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 reward);
-    event DelayReward(address account, uint startTime, uint totalDelayedReward);
+    event DelayReward(address account, uint campaignId, uint startTime, uint totalDelayedReward);
     event WithdrewExtraRewardTokens(address caller, uint globalReward, uint amount);
 
     // --- Modifiers ---
@@ -98,37 +98,23 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
         _;
     }
 
+    constructor(
+        address lpToken_,
+        address rewardToken_
+    ) public {
+        require(lpToken_ != address(0), "GebUniswapSingleDistributionIncentives/invalid-lp-token");
+        require(rewardToken_ != address(0), "GebUniswapSingleDistributionIncentives/invalid-reward-token");
+        lpToken               = IERC20(lpToken_);
+        rewardToken           = IERC20(rewardToken_);
+    }
+
+    /// @notice Returns Id of currently active campaign, zero if none are active
     function currentCampaign() public view returns (uint) {
         if (campaignCount == 0) return 0;
         else
             for (uint i = campaignCount; campaigns[i].finish >= now; i--) {
                 if (campaigns[i].startTime <= now) return i;
             }
-    }
-
-    constructor(
-        address lpToken_,
-        address rewardToken_,
-        uint256 rewardDelay_,
-        uint256 instantExitPercentage_        
-    ) public {
-        require(lpToken_ != address(0), "GebUniswapSingleDistributionIncentives/invalid-lp-token");
-        require(rewardToken_ != address(0), "GebUniswapSingleDistributionIncentives/invalid-reward-token");
-        require(instantExitPercentage_ <= THOUSAND, "GebUniswapSingleDistributionIncentives/");
-        lpToken               = IERC20(lpToken_);
-        rewardToken           = IERC20(rewardToken_);
-        rewardDelay           = rewardDelay_;
-        instantExitPercentage = instantExitPercentage_;
-    }
-
-    // --- Administration ---
-    function modifyParameters(bytes32 parameter, uint256 val) external isAuthority {
-        if (parameter == "rewardDelay") { 
-          rewardDelay = val;
-        } else if (parameter == "instantExitPercentage") {
-          require(val <= THOUSAND, "GebUniswapSingleDistributionIncentives/invalid-instant-exit-percentage");
-          instantExitPercentage = val;
-        } else revert("GebUniswapSingleDistributionIncentives/modify-unrecognized-param");
     }
 
     /// @notice Returns tokens not locked for rewards to caller (only Authority)
@@ -141,12 +127,14 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
 
     // --- Distribution Logic ---
     /// @notice Returns last time distribution was active (now if currently active)
+    /// @param campaignId Id of the campaign
     function lastTimeRewardApplicable(uint campaignId) public view returns (uint256) {
         return min(block.timestamp, campaigns[campaignId].finish);
     }
 
     /// @notice Rewards per token staked
     /// @return returns rewards per token staked
+    /// @param campaignId Id of the campaign
     function rewardPerToken(uint campaignId) public view returns (uint256) {
         Campaign storage campaign = campaigns[campaignId];
         if (totalSupply() == 0) {
@@ -161,6 +149,7 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
 
     /// @notice Calculate earned tokens up to now
     /// @param account Account of the staker
+    /// @param campaignId Id of the campaign
     /// @return balance earned up to now
     function earned(address account, uint campaignId) public view returns (uint256) { 
         Campaign storage campaign = campaigns[campaignId];
@@ -183,16 +172,18 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
         emit Withdrawn(msg.sender, amount);
     }
 
-    /// @notice One TX exit (withdraws full balance and gets all available rewards)
+    /// @notice One TX exit (withdraws full balance and gets available rewards from current or last campaign)
     function exit() external {
         withdraw(balanceOf(msg.sender));
-        // getReward();
+        uint currentCampaign_ = currentCampaign();
+        getReward((currentCampaign_ == 0) ? campaignCount : currentCampaign_);
     }
 
     /// @notice Wthdraw rewards after locking period
     /// @param account Account that owns a reward balance
+    /// @param campaignId Id of the campaign
     /// @param timestamp Timestamp when getReward was called (and instant rewards paid)
-    function getLockedReward(address account, uint timestamp) external nonReentrant { 
+    function getLockedReward(address account, uint campaignId, uint timestamp) external nonReentrant { 
         require(delayedRewards[account][timestamp].totalAmount > 0, "GebUniswapSingleDistributionIncentives/invalid-slot");
         require(
           delayedRewards[account][timestamp].totalAmount > delayedRewards[account][timestamp].exitedAmount,
@@ -201,6 +192,7 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
         uint timeElapsedSinceLastExit = sub(now, delayedRewards[account][timestamp].latestExitTime);
         require(timeElapsedSinceLastExit > 0, "GebUniswapSingleDistributionIncentives/invalid-time-elapsed");
         uint amountToExit;
+        uint rewardDelay = campaigns[campaignId].rewardDelay;
         if (now >= add(timestamp, rewardDelay)) {
             amountToExit = sub(delayedRewards[account][timestamp].totalAmount, delayedRewards[account][timestamp].exitedAmount);
         } else {
@@ -215,16 +207,17 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
     }
 
     /// @notice Wthdraw rewards available, locking the remainder
+    /// @param campaignId Id of the campaign
     function getReward(uint campaignId) public updateReward(msg.sender) nonReentrant {
         uint256 totalReward = earned(msg.sender, campaignId);
         if (totalReward > 0) {
             campaigns[campaignId].rewards[msg.sender] = 0;
         }
-        uint256 instantReward = mul(totalReward, instantExitPercentage) / THOUSAND;
+        uint256 instantReward = mul(totalReward, campaigns[campaignId].instantExitPercentage) / THOUSAND;
         uint256 totalDelayedReward = sub(totalReward, instantReward);
         if (totalDelayedReward > 0) {
             delayedRewards[msg.sender][now] = DelayedReward(totalDelayedReward, 0, now);
-            emit DelayReward(msg.sender, now, totalDelayedReward);
+            emit DelayReward(msg.sender, campaignId, now, totalDelayedReward);
         }
         if (instantReward > 0) {
             globalReward = sub(globalReward, instantReward);
@@ -234,11 +227,18 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
     }
 
     /// @notice Notify distribution amount
+    /// @param reward Reward for campaign (the contract needs enough balance for the campaign to be created)
+    /// @param startTime Campaign startTime
+    /// @param duration Campaign duration
+    /// @param rewardDelay Vesting period for locked tokens
+    /// @param instantExitPercentage Percentage to be paid immediately on getRewards (1000 == 100%)
     function newCampaign
     (
         uint256 reward,
         uint256 startTime,
-        uint256 duration
+        uint256 duration,
+        uint256 rewardDelay,
+        uint256 instantExitPercentage
     )
         external
         onlyRewardDistribution
@@ -248,16 +248,19 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
         require(startTime >= block.timestamp, "GebUniswapRollingDistributionIncentives/startTime-in-the-past");
         require(startTime > lastFinish, "GebUniswapRollingDistributionIncentives/startTime-before-last-campaign-finishes");
         require(duration > 0, "GebUniswapRollingDistributionIncentives/invalid-duration");
+        require(instantExitPercentage <= THOUSAND, "GebUniswapRollingDistributionIncentives/invalid-instant-exit-percentage");
 
         campaignCount = add(campaignCount, 1);
         campaigns[campaignCount] = Campaign(
             reward,
             startTime,
-            rewardDelay,
-            div(reward, duration), // rewardRate
+            duration,
+            div(reward, duration),   // rewardRate
             add(startTime,duration), // finish
-            startTime, // lastUpdateTime
-            0 // rewardPerToken
+            startTime,                 // lastUpdateTime
+            0,                           // rewardPerTokenStored
+            rewardDelay,
+            instantExitPercentage
         );
         lastFinish = add(startTime, duration);
         globalReward = add(globalReward,reward);
@@ -265,3 +268,4 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
         emit CampaignAdded(campaignCount);
     }
 }
+
