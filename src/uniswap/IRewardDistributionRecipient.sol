@@ -39,8 +39,6 @@ import "./Auth.sol";
 abstract contract IRewardDistributionRecipient is Auth {
     address public rewardDistribution;
 
-    function notifyRewardAmount(uint256 reward) virtual external;
-
     modifier onlyRewardDistribution() {
         require(msg.sender == rewardDistribution, "IRewardDistributionRecipient/caller-is-not-reward-distribution");
         _;
