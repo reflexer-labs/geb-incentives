@@ -2,7 +2,7 @@ pragma solidity ^0.6.7;
 
 import "ds-test/test.sol";
 import "ds-token/token.sol";
-import "./GebUniswapSingleDistributionIncentives.sol";
+import "../uniswap/GebUniswapSingleDistributionIncentives.sol";
 
 abstract contract Hevm {
     function warp(uint256) virtual public;
@@ -91,8 +91,6 @@ contract GebUniswapSingleDistributionIncentivesTest is DSTest {
         lpToken.mint(address(user2), initialBalance);
         lpToken.mint(address(user3), initialBalance);
         rewardToken.mint(address(pool), 100 ether);
-
-        pool.setRewardDistribution(self);
 
         hevm.warp(now + 1000);
     }
@@ -228,14 +226,14 @@ contract GebUniswapSingleDistributionIncentivesTest is DSTest {
 
     // testing reward calculation
     function almostEqual(uint origValue, uint origExpected) public returns (bool) { 
-        uint precision = 6; 
+        uint precision = 7; 
         uint value = origValue / (1 * 10 ** precision);
         uint expected = origExpected / (1 * 10 ** precision);
 
         emit log_named_uint("value", value);
         emit log_named_uint("expected", expected);
         return (
-            value >= expected -1 && value <= expected +1
+            value >= expected - 1 && value <= expected + 1
         );
     }
 
