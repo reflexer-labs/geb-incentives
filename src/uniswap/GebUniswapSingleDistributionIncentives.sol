@@ -34,13 +34,12 @@
 
 pragma solidity ^0.6.7;
 
-import "./IRewardDistributionRecipient.sol";
 import "../lp/LPTokenWrapper.sol";
-
+import "./Auth.sol";
 import "../zeppelin/math/Math.sol";
 import "../zeppelin/utils/ReentrancyGuard.sol";
 
-contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient, LPTokenWrapper, Math, ReentrancyGuard {
+contract GebUniswapSingleDistributionIncentives is LPTokenWrapper, Math, Auth, ReentrancyGuard {
     // --- Variables ---
     IERC20  public rewardToken;
 
@@ -236,7 +235,7 @@ contract GebUniswapSingleDistributionIncentives is IRewardDistributionRecipient,
     /// @param reward Reward amount
     function notifyRewardAmount(uint256 reward)
         external
-        onlyRewardDistribution
+        isAuthority
         updateReward(address(0))
     {
         if (block.timestamp > startTime) {

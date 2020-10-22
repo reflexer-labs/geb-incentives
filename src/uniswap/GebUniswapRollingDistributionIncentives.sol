@@ -34,13 +34,12 @@
 
 pragma solidity ^0.6.7;
 
-import "./IRewardDistributionRecipient.sol";
 import "../lp/LPTokenWrapper.sol";
-
+import "./Auth.sol";
 import "../zeppelin/math/Math.sol";
 import "../zeppelin/utils/ReentrancyGuard.sol";
 
-contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient, LPTokenWrapper, Math, ReentrancyGuard {
+contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, ReentrancyGuard {
     // --- Variables ---
     IERC20  public rewardToken;
 
@@ -102,24 +101,52 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
         address lpToken_,
         address rewardToken_
     ) public {
-        require(lpToken_ != address(0), "GebUniswapSingleDistributionIncentives/invalid-lp-token");
-        require(rewardToken_ != address(0), "GebUniswapSingleDistributionIncentives/invalid-reward-token");
+        require(lpToken_ != address(0), "GebUniswapRollingDistributionIncentives/invalid-lp-token");
+        require(rewardToken_ != address(0), "GebUniswapRollingDistributionIncentives/invalid-reward-token");
         lpToken               = IERC20(lpToken_);
         rewardToken           = IERC20(rewardToken_);
+    }
+
+    // --- Administration ---
+    /// @notice Modify Campaign parameters (only authed)
+    /// @param parameter Parameter to be changed
+    /// @param campaignId Campaign in wich to set the parameter
+    /// @param val new parameter value
+    function modifyParameters(bytes32 parameter, uint256 campaignId, uint256 val) external isAuthority {
+        Campaign storage campaign = campaigns[campaignId];
+        require(campaign.startTime > block.timestamp, "GebUniswapRollingDistributionIncentives/invalid-campaign");
+
+        if (parameter == "reward") {
+          require(val > 0, "GebUniswapRollingDistributionIncentives/invalid-reward");
+          campaign.reward = val;
+        } else if (parameter == "startTime") {
+          require(val > block.timestamp, "GebUniswapRollingDistributionIncentives/invalid-new-start-time");
+          campaign.startTime = val;
+          campaign.lastUpdateTime = val;
+        } else if (parameter == "duration") {
+          require(val > 0, "GebUniswapRollingDistributionIncentives/invalid-duration");
+          campaign.duration = val;
+          campaign.finish = campaign.startTime + val;
+        } else if (parameter == "rewardDelay") { 
+          campaign.rewardDelay = val;
+        } else if (parameter == "instantExitPercentage") {
+          require(val <= THOUSAND, "GebUniswapRollingDistributionIncentives/invalid-instant-exit-percentage");
+          campaign.instantExitPercentage = val;
+        } else revert("GebUniswapRollingDistributionIncentives/modify-unrecognized-param");
     }
 
     /// @notice Returns Id of currently active campaign, zero if none are active
     function currentCampaign() public view returns (uint) {
         if (campaignCount == 0) return 0;
         else
-            for (uint i = campaignCount; campaigns[i].finish >= now; i--) {
-                if (campaigns[i].startTime <= now) return i;
+            for (uint i = campaignCount; campaigns[i].finish >= block.timestamp; i--) {
+                if (campaigns[i].startTime <= block.timestamp) return i;
             }
     }
 
     /// @notice Returns tokens not locked for rewards to caller (only Authority)
     function withdrawExtraRewardTokens() external isAuthority {
-        require(rewardToken.balanceOf(address(this)) > globalReward, "GebUniswapSingleDistributionIncentives/does-not-exceed-global-reward");
+        require(rewardToken.balanceOf(address(this)) > globalReward, "GebUniswapRollingDistributionIncentives/does-not-exceed-global-reward");
         uint amountToWithdraw = sub(rewardToken.balanceOf(address(this)), globalReward);
         safeTransfer(rewardToken, msg.sender, amountToWithdraw);
         emit WithdrewExtraRewardTokens(msg.sender, globalReward, amountToWithdraw);
@@ -136,7 +163,9 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
     /// @return returns rewards per token staked
     /// @param campaignId Id of the campaign
     function rewardPerToken(uint campaignId) public view returns (uint256) {
+        require(campaignId <= campaignCount, "GebUniswapRollingDistributionIncentives/inexistent-campaign");
         Campaign storage campaign = campaigns[campaignId];
+        require(campaign.startTime != 0, "GebUniswapRollingDistributionIncentives/campaign-cancelled");
         if (totalSupply() == 0) {
             return campaign.rewardPerTokenStored;
         }
@@ -159,7 +188,7 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
     /// @notice Used for staking on the contract (previous ERC20 approval required)
     /// @param amount Amount to be staked
     function stake(uint256 amount) override public updateReward(msg.sender) nonReentrant {
-        require(amount > 0, "GebUniswapSingleDistributionIncentives/cannot-stake-zero");
+        require(amount > 0, "GebUniswapRollingDistributionIncentives/cannot-stake-zero");
         super.stake(amount);
         emit Staked(msg.sender, amount);
     }
@@ -167,7 +196,7 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
     /// @notice Used for withdrawing staked tokens
     /// @param amount Amount to be withdrawn
     function withdraw(uint256 amount) override public updateReward(msg.sender) nonReentrant { 
-        require(amount > 0, "GebUniswapSingleDistributionIncentives/cannot-withdraw-zero"); 
+        require(amount > 0, "GebUniswapRollingDistributionIncentives/cannot-withdraw-zero"); 
         super.withdraw(amount);
         emit Withdrawn(msg.sender, amount);
     }
@@ -184,21 +213,21 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
     /// @param campaignId Id of the campaign
     /// @param timestamp Timestamp when getReward was called (and instant rewards paid)
     function getLockedReward(address account, uint campaignId, uint timestamp) external nonReentrant { 
-        require(delayedRewards[account][timestamp].totalAmount > 0, "GebUniswapSingleDistributionIncentives/invalid-slot");
+        require(delayedRewards[account][timestamp].totalAmount > 0, "GebUniswapRollingDistributionIncentives/invalid-slot");
         require(
           delayedRewards[account][timestamp].totalAmount > delayedRewards[account][timestamp].exitedAmount,
-          "GebUniswapSingleDistributionIncentives/exited-whole-delayed-amount"
+          "GebUniswapRollingDistributionIncentives/exited-whole-delayed-amount"
         );
-        uint timeElapsedSinceLastExit = sub(now, delayedRewards[account][timestamp].latestExitTime);
-        require(timeElapsedSinceLastExit > 0, "GebUniswapSingleDistributionIncentives/invalid-time-elapsed");
+        uint timeElapsedSinceLastExit = sub(block.timestamp, delayedRewards[account][timestamp].latestExitTime);
+        require(timeElapsedSinceLastExit > 0, "GebUniswapRollingDistributionIncentives/invalid-time-elapsed");
         uint amountToExit;
         uint rewardDelay = campaigns[campaignId].rewardDelay;
-        if (now >= add(timestamp, rewardDelay)) {
+        if (block.timestamp >= add(timestamp, rewardDelay)) {
             amountToExit = sub(delayedRewards[account][timestamp].totalAmount, delayedRewards[account][timestamp].exitedAmount);
         } else {
             amountToExit = mul(div(mul(timeElapsedSinceLastExit, 100), rewardDelay), delayedRewards[account][timestamp].totalAmount) / 100;
         }
-        delayedRewards[account][timestamp].latestExitTime = now;
+        delayedRewards[account][timestamp].latestExitTime = block.timestamp;
         delayedRewards[account][timestamp].exitedAmount = add(delayedRewards[account][timestamp].exitedAmount, amountToExit);
         if (amountToExit > 0) {
             globalReward = sub(globalReward,amountToExit);
@@ -216,8 +245,8 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
         uint256 instantReward = mul(totalReward, campaigns[campaignId].instantExitPercentage) / THOUSAND;
         uint256 totalDelayedReward = sub(totalReward, instantReward);
         if (totalDelayedReward > 0) {
-            delayedRewards[msg.sender][now] = DelayedReward(totalDelayedReward, 0, now);
-            emit DelayReward(msg.sender, campaignId, now, totalDelayedReward);
+            delayedRewards[msg.sender][block.timestamp] = DelayedReward(totalDelayedReward, 0, block.timestamp);
+            emit DelayReward(msg.sender, campaignId, block.timestamp, totalDelayedReward);
         }
         if (instantReward > 0) {
             globalReward = sub(globalReward, instantReward);
@@ -241,10 +270,10 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
         uint256 instantExitPercentage
     )
         external
-        onlyRewardDistribution
+        isAuthority
     {
         require(reward > 0, "GebUniswapRollingDistributionIncentives/invalid-reward");
-        require(startTime >= block.timestamp, "GebUniswapRollingDistributionIncentives/startTime-in-the-past");
+        require(startTime > block.timestamp, "GebUniswapRollingDistributionIncentives/startTime-in-the-past");
         require(startTime > lastFinish, "GebUniswapRollingDistributionIncentives/startTime-before-last-campaign-finishes");
         require(duration > 0, "GebUniswapRollingDistributionIncentives/invalid-duration");
         require(instantExitPercentage <= THOUSAND, "GebUniswapRollingDistributionIncentives/invalid-instant-exit-percentage");
@@ -256,15 +285,21 @@ contract GebUniswapRollingDistributionIncentives is IRewardDistributionRecipient
             duration,
             div(reward, duration),   // rewardRate
             add(startTime,duration), // finish
-            startTime,                 // lastUpdateTime
-            0,                           // rewardPerTokenStored
+            startTime,               // lastUpdateTime
+            0,                       // rewardPerTokenStored
             rewardDelay,
             instantExitPercentage
         );
         lastFinish = add(startTime, duration);
         globalReward = add(globalReward,reward);
-        require(globalReward <= rewardToken.balanceOf(address(this)), "GebUniswapRollingDistributionIncentives/Provided-reward-too-high");
         emit CampaignAdded(campaignCount);
     }
-}
 
+    function cancelCampaign(uint campaignId) external isAuthority {
+        Campaign storage campaign = campaigns[campaignId];
+        require(campaign.startTime > now, "GebUniswapRollingDistributionIncentives/campaign-started");
+        campaign.startTime = 0;
+        campaign.duration = 0;
+        campaign.finish = 0;
+    }
+}
