@@ -1,3 +1,3 @@
-# GEB Uniswap SIngle Distribution Incentives
+# GEB Incentives
 
-Incentives for locking LP tokens. 
+Liquidity mining and protocol usage incentives.
