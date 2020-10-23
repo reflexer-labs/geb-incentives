@@ -17,8 +17,12 @@ contract LPTokenWrapper is SafeERC20 {
     }
 
     function stake(uint256 amount) virtual public {
+        stake(amount, msg.sender);
+    }
+
+    function stake(uint256 amount, address owner) virtual public {
         _totalSupply = add(_totalSupply, amount);
-        _balances[msg.sender] = add(_balances[msg.sender], amount);
+        _balances[owner] = add(_balances[owner], amount);
         safeTransferFrom(lpToken, msg.sender, address(this), amount);
     }
 

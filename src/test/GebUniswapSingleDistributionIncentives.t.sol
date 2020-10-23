@@ -19,6 +19,10 @@ contract Farmer {
         pool.stake(amount);
     }
 
+    function doStakeFor(uint amount, address owner) public {
+        pool.stake(amount, owner);
+    }
+
     function doWithdraw(uint amount) public {
         pool.withdraw(amount);
     }
@@ -176,6 +180,16 @@ contract GebUniswapSingleDistributionIncentivesTest is DSTest {
 
         assertEq(pool.totalSupply(), 1 ether);
         assertEq(pool.balanceOf(address(user1)), 1 ether);
+        assertEq(lpToken.balanceOf(address(pool)), 1 ether);
+        assertEq(lpToken.balanceOf(address(user1)), initialBalance - 1 ether);
+    }
+
+    function testStakeFor() public {
+        user1.doApprove(address(lpToken), address(pool), 1 ether);
+        user1.doStakeFor(1 ether, address(0xabc));
+
+        assertEq(pool.totalSupply(), 1 ether);
+        assertEq(pool.balanceOf(address(0xabc)), 1 ether);
         assertEq(lpToken.balanceOf(address(pool)), 1 ether);
         assertEq(lpToken.balanceOf(address(user1)), initialBalance - 1 ether);
     }
