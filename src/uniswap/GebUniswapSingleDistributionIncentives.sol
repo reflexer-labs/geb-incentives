@@ -167,10 +167,18 @@ contract GebUniswapSingleDistributionIncentives is LPTokenWrapper, Math, Auth, R
 
     /// @notice Used for staking on the contract (previous ERC20 approval required)
     /// @param amount Amount to be staked
-    function stake(uint256 amount) override public updateReward(msg.sender) checkStart nonReentrant {
-        require(amount > 0, "GebUniswapSingleDistributionIncentives/cannot-stake-zero");
-        super.stake(amount);
-        emit Staked(msg.sender, amount);
+    function stake(uint256 amount) override public {
+        stake(amount, msg.sender);
+    }
+
+    /// @notice Used for staking on the contract for another address (previous ERC20 approval required)
+    /// @param amount Amount to be staked
+    /// @param owner Account that will own both the rewards and liquidity
+    function stake(uint256 amount, address owner) override public updateReward(owner) checkStart nonReentrant {
+        require(amount > 0, "GebUniswapRollingDistributionIncentives/cannot-stake-zero");
+        require(owner != address(0), "GebUniswapRollingDistributionIncentives/invalid-owner");
+        super.stake(amount, owner);
+        emit Staked(owner, amount);
     }
 
     /// @notice Used for withdrawing staked tokens
