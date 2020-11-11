@@ -309,5 +309,6 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
         campaign.startTime = 0;
         campaign.duration = 0;
         campaign.finish = 0;
+        globalReward = sub(globalReward, campaign.reward);
     }
 }
