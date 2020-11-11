@@ -730,6 +730,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         assertEq(startTime, 0);
         assertEq(duration, 0);
         assertEq(finish, 0);
+        assertEq(pool.globalReward(), 0);
     }
 
     function testFailCancelCampaignAlreadyStarted() public { 
