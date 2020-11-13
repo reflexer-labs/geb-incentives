@@ -295,7 +295,7 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
             add(startTime,duration), // finish
             startTime,               // lastUpdateTime
             0,                       // rewardPerTokenStored
-            rewardDelay,
+            (instantExitPercentage == THOUSAND) ? 0 : rewardDelay,
             instantExitPercentage
         );
         lastFinish = add(startTime, duration);
