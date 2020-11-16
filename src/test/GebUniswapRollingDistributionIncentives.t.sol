@@ -74,8 +74,8 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
     function setUp() public {
         hevm = Hevm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
 
-        lpToken = new DSToken("LPT");
-        rewardToken = new DSToken("RWRD");
+        lpToken = new DSToken("LPT", "LPT");
+        rewardToken = new DSToken("RWRD", "RWRD");
         pool = new GebUniswapRollingDistributionIncentives(
             address(lpToken),
             address(rewardToken)
@@ -100,7 +100,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
     }
 
     // admin
-    function testModifyParameters() public { 
+    function testModifyParameters() public {
         pool.newCampaign(10 ether, now + 1 days, 5 days, 90 days, 500);
 
         pool.modifyParameters("reward", 1, 20 ether);
@@ -125,65 +125,65 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         assertEq(lastUpdateTime, startTime);
         assertEq(rewardDelay, 3 weeks);
         assertEq(instantExitPercentage, 300);
-    }   
+    }
 
-    function testFailModifyParametersUnauthorized() public { 
+    function testFailModifyParametersUnauthorized() public {
         pool.newCampaign(10 ether, now + 1 days, 5 days, 90 days, 500);
 
         user1.doModifyParameters("startTime", 1, now + 1);
     }
 
-    function testFailModifyParametersCampaignStarted() public { 
+    function testFailModifyParametersCampaignStarted() public {
         pool.newCampaign(10 ether, now + 1 days, 5 days, 90 days, 500);
         hevm.warp(now + 1 days);
         pool.modifyParameters("reward", 1, 1 ether);
     }
 
-    function testFailModifyParametersInexistentCampaign() public { 
+    function testFailModifyParametersInexistentCampaign() public {
         pool.newCampaign(10 ether, now + 1 days, 5 days, 90 days, 500);
         pool.modifyParameters("reward", 2, 1 ether);
     }
 
-    function testFailModifyParametersZeroReward() public { 
+    function testFailModifyParametersZeroReward() public {
         pool.newCampaign(10 ether, now + 1 days, 5 days, 90 days, 500);
         pool.modifyParameters("reward", 1, 0);
     }
 
-    function testFailModifyParametersStartPast() public { 
+    function testFailModifyParametersStartPast() public {
         pool.newCampaign(10 ether, now + 1 days, 5 days, 90 days, 500);
         pool.modifyParameters("startTime", 1, now);
-    }  
+    }
 
-    function testFailModifyParametersDurationZero() public { 
+    function testFailModifyParametersDurationZero() public {
         pool.newCampaign(10 ether, now + 1 days, 5 days, 90 days, 500);
         pool.modifyParameters("duration", 1, 0);
-    }  
+    }
 
-    function testFailModifyParametersInvalidExitPercentage() public { 
+    function testFailModifyParametersInvalidExitPercentage() public {
         pool.newCampaign(10 ether, now + 1 days, 5 days, 90 days, 500);
         pool.modifyParameters("instantExitPercentage", 1, 1001);
-    }  
+    }
 
-    function testWithdrawExtraRewardTokens() public { 
+    function testWithdrawExtraRewardTokens() public {
 
         pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
         assertEq(rewardToken.balanceOf(address(this)), 0);
         pool.withdrawExtraRewardTokens();
         assertEq(rewardToken.balanceOf(address(this)), 90 ether);
-    }   
+    }
 
-    function testFailWithdrawNoExtraBalance() public { 
+    function testFailWithdrawNoExtraBalance() public {
 
         pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
         assertEq(rewardToken.balanceOf(address(this)), 0);
         pool.withdrawExtraRewardTokens();
         pool.withdrawExtraRewardTokens();
-    }   
+    }
 
-    function testFailWithdrawUnauthorized() public { 
+    function testFailWithdrawUnauthorized() public {
         pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
         user1.doWithdrawExtraRewardTokens();
-    }  
+    }
 
     // stake
     function testStake() public {
@@ -245,8 +245,8 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
 
     // testing reward calculation
-    function almostEqual(uint origValue, uint origExpected) public returns (bool) { 
-        uint precision = 8; 
+    function almostEqual(uint origValue, uint origExpected) public returns (bool) {
+        uint precision = 8;
         uint value = origValue / (1 * 10 ** precision);
         uint expected = origExpected / (1 * 10 ** precision);
 
@@ -314,29 +314,29 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         hevm.warp(now + 30 weeks);
         assertTrue(almostEqual(pool.rewardPerToken(1), 5 ether));
         assertTrue(almostEqual(pool.earned(address(user1), 1), 5 ether));
-        assertTrue(almostEqual(pool.earned(address(user2), 1), 5 ether));  
+        assertTrue(almostEqual(pool.earned(address(user2), 1), 5 ether));
 
         pool.newCampaign(30 ether, now + 1, 90 days, rewardDelay, instantExitPercentage);
         hevm.warp(now + 90 days + 1);
 
         assertTrue(almostEqual(pool.rewardPerToken(2), 15 ether));
         assertTrue(almostEqual(pool.earned(address(user1), 2), 15 ether));
-        assertTrue(almostEqual(pool.earned(address(user2), 2), 15 ether));     
+        assertTrue(almostEqual(pool.earned(address(user2), 2), 15 ether));
 
         hevm.warp(now + 200 weeks);
         assertTrue(almostEqual(pool.rewardPerToken(1), 5 ether));
         assertTrue(almostEqual(pool.earned(address(user1), 1), 5 ether));
-        assertTrue(almostEqual(pool.earned(address(user2), 1), 5 ether));  
+        assertTrue(almostEqual(pool.earned(address(user2), 1), 5 ether));
         assertTrue(almostEqual(pool.rewardPerToken(2), 15 ether));
         assertTrue(almostEqual(pool.earned(address(user1), 2), 15 ether));
-        assertTrue(almostEqual(pool.earned(address(user2), 2), 15 ether)); 
+        assertTrue(almostEqual(pool.earned(address(user2), 2), 15 ether));
 
         pool.newCampaign(60 ether, now + 1, 280 days, rewardDelay, instantExitPercentage);
         hevm.warp(now + 280 days + 1);
 
         assertTrue(almostEqual(pool.rewardPerToken(3), 30 ether));
         assertTrue(almostEqual(pool.earned(address(user1), 3), 30 ether));
-        assertTrue(almostEqual(pool.earned(address(user2), 3), 30 ether));      
+        assertTrue(almostEqual(pool.earned(address(user2), 3), 30 ether));
     }
 
     function testRewardCalculation3() public { // two stakers with different stake
@@ -353,7 +353,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
         assertTrue(almostEqual(pool.rewardPerToken(1), 3 ether));
         assertTrue(almostEqual(pool.earned(address(user1),1), 3 ether));
-        assertTrue(almostEqual(pool.earned(address(user2),1), 9 ether));  
+        assertTrue(almostEqual(pool.earned(address(user2),1), 9 ether));
 
         hevm.warp(now + 1);
         pool.newCampaign(24 ether, now + 1, 280 days, rewardDelay, instantExitPercentage);
@@ -361,14 +361,14 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
         assertTrue(almostEqual(pool.rewardPerToken(2), 6 ether));
         assertTrue(almostEqual(pool.earned(address(user1), 2), 6 ether));
-        assertTrue(almostEqual(pool.earned(address(user2), 2), 18 ether));       
+        assertTrue(almostEqual(pool.earned(address(user2), 2), 18 ether));
     }
 
-    function testRewardCalculation4() public { 
+    function testRewardCalculation4() public {
         //
         // 1x: +----------------+ = 12 for 1w + 3 for 2w
         // 3x:         +--------+ =  0 for 1w + 9 for 2w
-        //    
+        //
 
         pool.newCampaign(36 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
         hevm.warp(now+1);
@@ -383,9 +383,9 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
         hevm.warp(now + 14 days);
 
-        assertTrue(almostEqual(pool.rewardPerToken(1), 18 ether)); 
+        assertTrue(almostEqual(pool.rewardPerToken(1), 18 ether));
         assertTrue(almostEqual(pool.earned(address(user1), 1), 18 ether));
-        assertTrue(almostEqual(pool.earned(address(user2), 1), 18 ether));   
+        assertTrue(almostEqual(pool.earned(address(user2), 1), 18 ether));
 
         hevm.warp(now + 6 weeks);
         //
@@ -400,7 +400,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
         hevm.warp(now + 7 days + 1);
         assertTrue(almostEqual(pool.earned(address(user1), 2), 3 ether));
-        assertTrue(almostEqual(pool.earned(address(user2), 2), 9 ether)); 
+        assertTrue(almostEqual(pool.earned(address(user2), 2), 9 ether));
 
         user3.doApprove(address(lpToken), address(pool), 8 ether);
         user3.doStake(8 ether);
@@ -408,15 +408,15 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
         hevm.warp(now + 7 days);
         assertTrue(almostEqual(pool.earned(address(user1), 2), 4 ether));
-        assertTrue(almostEqual(pool.earned(address(user2), 2), 12 ether)); 
-        assertTrue(almostEqual(pool.earned(address(user3), 2), 8 ether)); 
+        assertTrue(almostEqual(pool.earned(address(user2), 2), 12 ether));
+        assertTrue(almostEqual(pool.earned(address(user3), 2), 8 ether));
 
         user2.doWithdraw(3 ether);
         hevm.warp(now + 7 days);
 
         assertTrue(almostEqual(pool.earned(address(user1), 2), 5333333333333333333));
-        assertTrue(almostEqual(pool.earned(address(user2), 2), 12 ether)); 
-        assertTrue(almostEqual(pool.earned(address(user3), 2), 18666666666666666666));    
+        assertTrue(almostEqual(pool.earned(address(user2), 2), 12 ether));
+        assertTrue(almostEqual(pool.earned(address(user3), 2), 18666666666666666666));
     }
 
     function testRewardCalculation5() public { // one flash staker
@@ -440,7 +440,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
     }
 
     // getReward
-    function testGetReward() public { 
+    function testGetReward() public {
 
         //
         // 1x: +----------------+--------+ = 3 + 1 + 1.33
@@ -470,7 +470,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         user3.doGetReward(1);
 
         assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), (5333333333333333333 * instantExitPercentage) / 1000));
-        assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), (12 ether * instantExitPercentage) / 1000)); 
+        assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), (12 ether * instantExitPercentage) / 1000));
         assertTrue(almostEqual(rewardToken.balanceOf(address(user3)), (18666666666666666666 * instantExitPercentage) / 1000));
 
         user1.doGetReward(1);
@@ -478,7 +478,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         user3.doGetReward(1);
 
         assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), (5333333333333333333 * instantExitPercentage) / 1000));
-        assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), (12 ether * instantExitPercentage) / 1000)); 
+        assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), (12 ether * instantExitPercentage) / 1000));
         assertTrue(almostEqual(rewardToken.balanceOf(address(user3)), (18666666666666666666 * instantExitPercentage) / 1000));
 
         // checking locked rewards
@@ -498,7 +498,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         assertEq(lastExitTime, now);
     }
 
-    function testGetLockedReward() public { 
+    function testGetLockedReward() public {
 
         pool.newCampaign(30 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
 
@@ -567,8 +567,8 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         assertEq(lastExitTime, now);
         assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), instantReward + amountLocked));
     }
- 
-    function testFailGetLockedRewardNoBalance() public { 
+
+    function testFailGetLockedRewardNoBalance() public {
 
         pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
 
@@ -585,9 +585,9 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
         user1.doGetLockedReward(address(user1), 1, rewardTime);
         user1.doGetLockedReward(address(user1), 1, rewardTime);
-    }   
+    }
 
-    function testFailInvalidSlot() public { 
+    function testFailInvalidSlot() public {
 
         pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
 
@@ -601,9 +601,9 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         hevm.warp(now + rewardDelay);
 
         user1.doGetLockedReward(address(user1), 1, 123);
-    }   
+    }
 
-    function testFailInvalidTimeElapsed() public { 
+    function testFailInvalidTimeElapsed() public {
 
         pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
 
@@ -618,10 +618,10 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
         user1.doGetLockedReward(address(user1), 1, now - 2 hours);
         user1.doGetLockedReward(address(user1), 1, now - 2 hours);
-    }   
+    }
 
     // exit
-    function testExit() public { 
+    function testExit() public {
 
         pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
 
@@ -653,7 +653,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         assertEq(pool.lastFinish(), now + 21 days + 1);
         assertEq(pool.globalReward(), 10 ether);
         assertEq(pool.campaignCount(), 1);
-        
+
         (
             uint reward,
             uint startTime,
@@ -670,33 +670,33 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         assertEq(duration, 21 days);
         assertEq(rewardRate, reward / 21 days);
         assertEq(finish, now + 21 days + 1);
-        assertEq(lastUpdateTime, now + 1); 
+        assertEq(lastUpdateTime, now + 1);
         assertEq(rewardPerToken, 0);
         assertEq(rewardDelay, 0);
         assertEq(instantExitPercentage, 1000);
     }
 
-    function testFailNewCampaignInvalidInstantExitPercenntage() public { 
+    function testFailNewCampaignInvalidInstantExitPercenntage() public {
         pool.newCampaign(10 ether, now + 30 days, 30 days, rewardDelay, 1001);
     }
 
-    function testFailNewCampaignRewardZero() public { 
+    function testFailNewCampaignRewardZero() public {
         pool.newCampaign(0, now + 30 days, 30 days, rewardDelay, instantExitPercentage);
     }
 
-    function testFailNewCampaignDurationZero() public { 
+    function testFailNewCampaignDurationZero() public {
         pool.newCampaign(10 ether, now + 30 days, 0, rewardDelay, instantExitPercentage);
     }
 
-    function testFailNewCampaignStartPast() public { 
+    function testFailNewCampaignStartPast() public {
         pool.newCampaign(10 ether, now - 1, 30 days, rewardDelay, instantExitPercentage);
     }
 
-    function testFailNotifyRewardAmountUnauthorized() public { 
+    function testFailNotifyRewardAmountUnauthorized() public {
         user1.doNewCampaign(10 ether, now + 1, 1 days);
     }
 
-    function testFailNewCampaignOverlappingCampaigns() public { 
+    function testFailNewCampaignOverlappingCampaigns() public {
         pool.newCampaign(10 ether, now + 1, 30 days, rewardDelay, instantExitPercentage);
         pool.newCampaign(10 ether, now + 2 days, 30 days, rewardDelay, instantExitPercentage);
     }
@@ -715,7 +715,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         user1.doGetReward(1);
     }
 
-    function testCancelCampaign() public { 
+    function testCancelCampaign() public {
 
         pool.newCampaign(10 ether, now + 1 days, 21 days, rewardDelay, instantExitPercentage);
         pool.cancelCampaign(1);
@@ -733,7 +733,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         assertEq(pool.globalReward(), 0);
     }
 
-    function testFailCancelCampaignAlreadyStarted() public { 
+    function testFailCancelCampaignAlreadyStarted() public {
 
         pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
         hevm.warp(now+1);
