@@ -31,8 +31,8 @@ contract Farmer {
         pool.exit();
     }
 
-    function doGetLockedReward(address account, uint campaignId, uint timestamp) public {
-        pool.getLockedReward(account, campaignId, timestamp);
+    function doGetLockedReward(address account, uint campaignId) public {
+        pool.getLockedReward(account, campaignId);
     }
 
     function doGetReward(uint campaign) public {
@@ -100,7 +100,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
     }
 
     // admin
-    function testModifyParameters() public {
+    function testModifyParameters2() public {
         pool.newCampaign(10 ether, now + 1 days, 5 days, 90 days, 500);
 
         pool.modifyParameters("reward", 1, 20 ether);
@@ -137,6 +137,12 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         pool.newCampaign(10 ether, now + 1 days, 5 days, 90 days, 500);
         hevm.warp(now + 1 days);
         pool.modifyParameters("reward", 1, 1 ether);
+    }
+
+    function testFailModifyParametersLongerRewardDelayAfterCampaignStarted() public {
+        pool.newCampaign(10 ether, now + 1 days, 5 days, 90 days, 500);
+        hevm.warp(now + 1 days);
+        pool.modifyParameters("rewardDelay", 1, 90 days + 1);
     }
 
     function testFailModifyParametersInexistentCampaign() public {
@@ -246,7 +252,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
     // testing reward calculation
     function almostEqual(uint origValue, uint origExpected) public returns (bool) {
-        uint precision = 8;
+        uint precision = 14;
         uint value = origValue / (1 * 10 ** precision);
         uint expected = origExpected / (1 * 10 ** precision);
 
@@ -482,17 +488,17 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         assertTrue(almostEqual(rewardToken.balanceOf(address(user3)), (18666666666666666666 * instantExitPercentage) / 1000));
 
         // checking locked rewards
-        (uint totalAmount, uint exitedAmount, uint lastExitTime) = pool.delayedRewards(address(user1), now);
+        (uint totalAmount, uint exitedAmount, uint lastExitTime) = pool.delayedRewards(address(user1), 1);
         assertTrue(almostEqual(totalAmount, 5333333333333333333 - ((5333333333333333333 * instantExitPercentage) / 1000)));
         assertEq(exitedAmount, 0);
         assertEq(lastExitTime, now);
 
-        (totalAmount, exitedAmount, lastExitTime) = pool.delayedRewards(address(user2), now);
+        (totalAmount, exitedAmount, lastExitTime) = pool.delayedRewards(address(user2), 1);
         assertTrue(almostEqual(totalAmount, 12 ether - ((12 ether * instantExitPercentage) / 1000)));
         assertEq(exitedAmount, 0);
         assertEq(lastExitTime, now);
 
-        (totalAmount, exitedAmount, lastExitTime) = pool.delayedRewards(address(user3), now);
+        (totalAmount, exitedAmount, lastExitTime) = pool.delayedRewards(address(user3), 1);
         assertTrue(almostEqual(totalAmount, 18666666666666666666 - ((18666666666666666666 * instantExitPercentage) / 1000)));
         assertEq(exitedAmount, 0);
         assertEq(lastExitTime, now);
@@ -509,22 +515,20 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         user3.doApprove(address(lpToken), address(pool), 1 ether);
         user3.doStake(1 ether);
 
-        hevm.warp(now + 21 days + 1);
+        hevm.warp(now + 21 days);
 
         user1.doGetReward(1); // 10 eth each
         user2.doGetReward(1);
         user3.doGetReward(1);
 
-        uint rewardTime = now;
-
         uint instantReward = (10 ether * instantExitPercentage) / 1000;
         uint amountLocked = 10 ether - instantReward;
 
         // 3 days rewardDelay
-        hevm.warp(now + 3 days);
+        hevm.warp(now + 3 days + 1);
 
-        user1.doGetLockedReward(address(user1), 1, rewardTime);
-        (uint totalAmount, uint exitedAmount, uint lastExitTime) = pool.delayedRewards(address(user1), rewardTime);
+        user1.doGetLockedReward(address(user1), 1);
+        (uint totalAmount, uint exitedAmount, uint lastExitTime) = pool.delayedRewards(address(user1), 1);
         assertTrue(almostEqual(totalAmount, amountLocked));
         assertTrue(almostEqual(exitedAmount, amountLocked / 4));
         assertEq(lastExitTime, now);
@@ -533,8 +537,8 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         // 6 days
         hevm.warp(now + 3 days);
 
-        user1.doGetLockedReward(address(user2), 1, rewardTime);
-        (totalAmount, exitedAmount, lastExitTime) = pool.delayedRewards(address(user2), rewardTime);
+        user1.doGetLockedReward(address(user2), 1);
+        (totalAmount, exitedAmount, lastExitTime) = pool.delayedRewards(address(user2), 1);
         assertTrue(almostEqual(totalAmount, amountLocked));
         assertTrue(almostEqual(exitedAmount, amountLocked / 2));
         assertEq(lastExitTime, now);
@@ -543,15 +547,15 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         // 12 days - all unlocked
         hevm.warp(now + 6 days);
 
-        user1.doGetLockedReward(address(user3), 1, rewardTime);
-        (totalAmount, exitedAmount, lastExitTime) = pool.delayedRewards(address(user3), rewardTime);
+        user1.doGetLockedReward(address(user3), 1);
+        (totalAmount, exitedAmount, lastExitTime) = pool.delayedRewards(address(user3), 1);
         assertTrue(almostEqual(totalAmount, amountLocked));
         assertTrue(almostEqual(exitedAmount, amountLocked));
         assertEq(lastExitTime, now);
         assertTrue(almostEqual(rewardToken.balanceOf(address(user3)), instantReward + amountLocked));
 
-        user1.doGetLockedReward(address(user1), 1, rewardTime);
-        (totalAmount, exitedAmount, lastExitTime) = pool.delayedRewards(address(user1), rewardTime);
+        user1.doGetLockedReward(address(user1), 1);
+        (totalAmount, exitedAmount, lastExitTime) = pool.delayedRewards(address(user1), 1);
         assertTrue(almostEqual(totalAmount, amountLocked));
         assertTrue(almostEqual(exitedAmount, amountLocked));
         assertEq(lastExitTime, now);
@@ -560,8 +564,8 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         // far into the future
         hevm.warp(now + 104 weeks);
 
-        user1.doGetLockedReward(address(user2), 1, rewardTime);
-        (totalAmount, exitedAmount, lastExitTime) = pool.delayedRewards(address(user2), rewardTime);
+        user1.doGetLockedReward(address(user2), 1);
+        (totalAmount, exitedAmount, lastExitTime) = pool.delayedRewards(address(user2), 1);
         assertTrue(almostEqual(totalAmount, amountLocked));
         assertTrue(almostEqual(exitedAmount, amountLocked));
         assertEq(lastExitTime, now);
@@ -583,24 +587,8 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
         hevm.warp(now + rewardDelay);
 
-        user1.doGetLockedReward(address(user1), 1, rewardTime);
-        user1.doGetLockedReward(address(user1), 1, rewardTime);
-    }
-
-    function testFailInvalidSlot() public {
-
-        pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
-
-        user1.doApprove(address(lpToken), address(pool), 1 ether);
-        user1.doStake(1 ether);
-
-        hevm.warp(now + 21 days);
-
-        user1.doGetReward(1); // 10
-
-        hevm.warp(now + rewardDelay);
-
-        user1.doGetLockedReward(address(user1), 1, 123);
+        user1.doGetLockedReward(address(user1), 1);
+        user1.doGetLockedReward(address(user1), 1);
     }
 
     function testFailInvalidTimeElapsed() public {
@@ -616,8 +604,8 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
         hevm.warp(now + 2 hours);
 
-        user1.doGetLockedReward(address(user1), 1, now - 2 hours);
-        user1.doGetLockedReward(address(user1), 1, now - 2 hours);
+        user1.doGetLockedReward(address(user1), 1);
+        user1.doGetLockedReward(address(user1), 1);
     }
 
     // exit
@@ -635,11 +623,55 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
         user1.doExit();
 
-        (uint totalAmount, uint exitedAmount, uint lastExitTime) = pool.delayedRewards(address(user1), now);
+        (uint totalAmount, uint exitedAmount, uint lastExitTime) = pool.delayedRewards(address(user1), 1);
         assertTrue(almostEqual(totalAmount, amountLocked));
         assertEq(exitedAmount, 0);
         assertEq(lastExitTime, now);
         assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), instantReward));
+    }
+
+    function testExitMidVesting() public {
+
+        pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
+
+        user1.doApprove(address(lpToken), address(pool), 1 ether);
+        user1.doStake(1 ether);
+
+        hevm.warp(now + 21 days + 1);
+        hevm.warp(now + (rewardDelay / 2));
+
+        uint instantReward = (10 ether * instantExitPercentage) / 1000;
+        uint amountLocked = 10 ether - instantReward;
+
+        user1.doExit();
+
+        (uint totalAmount, uint exitedAmount, uint lastExitTime) = pool.delayedRewards(address(user1), 1);
+        assertTrue(almostEqual(totalAmount, amountLocked));
+        assertTrue(almostEqual(exitedAmount, amountLocked / 2));
+        assertEq(lastExitTime, now);
+        assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), instantReward + (amountLocked / 2)));
+    }
+
+    function testExitAfterVesting() public {
+
+        pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
+
+        user1.doApprove(address(lpToken), address(pool), 1 ether);
+        user1.doStake(1 ether);
+
+        hevm.warp(now + 21 days + 1);
+        hevm.warp(now + rewardDelay);
+
+        uint instantReward = (10 ether * instantExitPercentage) / 1000;
+        uint amountLocked = 10 ether - instantReward;
+
+        user1.doExit();
+
+        (uint totalAmount, uint exitedAmount, uint lastExitTime) = pool.delayedRewards(address(user1), 1);
+        assertTrue(almostEqual(totalAmount, amountLocked));
+        assertEq(exitedAmount, totalAmount);
+        assertEq(lastExitTime, now);
+        assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), instantReward + exitedAmount));
     }
 
     // notifyRewardamount
@@ -669,7 +701,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         assertEq(startTime, now + 1);
         assertEq(duration, 21 days);
         assertEq(rewardRate, reward / 21 days);
-        assertEq(finish, now + 21 days + 1);
+        assertEq(finish, now + 21 days);
         assertEq(lastUpdateTime, now + 1);
         assertEq(rewardPerToken, 0);
         assertEq(rewardDelay, 0);

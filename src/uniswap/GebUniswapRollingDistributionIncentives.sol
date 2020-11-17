@@ -83,18 +83,24 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
 
     // --- Modifiers ---
     modifier updateReward(address account) {
-        uint campaignId = currentCampaign();
-        if (campaignId != 0) {
-            Campaign storage campaign = campaigns[campaignId];
+        for (uint i = campaignCount; i > 0; i--)
+            _updateReward(account,i);
+        _;
+    }
 
+    modifier updateCampaignReward(address account, uint campaignId) {
+        _updateReward(account, campaignId);
+        _;
+    }
+
+    function _updateReward(address account, uint campaignId) internal {
+        Campaign storage campaign = campaigns[campaignId];
+        if (campaign.lastUpdateTime != campaign.finish) {
             campaign.rewardPerTokenStored = rewardPerToken(campaignId);
             campaign.lastUpdateTime = lastTimeRewardApplicable(campaignId);
-            if (account != address(0)) {
-                campaign.rewards[account] = earned(account, campaignId);
-                campaign.userRewardPerTokenPaid[account] = campaign.rewardPerTokenStored;
-            }
         }
-        _;
+        campaign.rewards[account] = earned(account, campaignId);
+        campaign.userRewardPerTokenPaid[account] = campaign.rewardPerTokenStored;
     }
 
     constructor(
@@ -114,6 +120,17 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
     /// @param val new parameter value
     function modifyParameters(bytes32 parameter, uint256 campaignId, uint256 val) external isAuthority {
         Campaign storage campaign = campaigns[campaignId];
+
+        if (parameter == "rewardDelay") { 
+          require(
+              campaign.startTime > block.timestamp ||
+              val < campaign.rewardDelay,
+              "GebUniswapRollingDistributionIncentives/invalid-reward-delay"
+          );
+          campaign.rewardDelay = val;
+          return;
+        }
+
         require(campaign.startTime > block.timestamp, "GebUniswapRollingDistributionIncentives/invalid-campaign");
 
         if (parameter == "reward") {
@@ -127,8 +144,6 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
           require(val > 0, "GebUniswapRollingDistributionIncentives/invalid-duration");
           campaign.duration = val;
           campaign.finish = campaign.startTime + val;
-        } else if (parameter == "rewardDelay") { 
-          campaign.rewardDelay = val;
         } else if (parameter == "instantExitPercentage") {
           require(val <= THOUSAND, "GebUniswapRollingDistributionIncentives/invalid-instant-exit-percentage");
           campaign.instantExitPercentage = val;
@@ -219,42 +234,44 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
     /// @notice Wthdraw rewards after locking period
     /// @param account Account that owns a reward balance
     /// @param campaignId Id of the campaign
-    /// @param timestamp Timestamp when getReward was called (and instant rewards paid)
-    function getLockedReward(address account, uint campaignId, uint timestamp) external nonReentrant { 
-        require(delayedRewards[account][timestamp].totalAmount > 0, "GebUniswapRollingDistributionIncentives/invalid-slot");
+    function getLockedReward(address account, uint campaignId) public { 
         require(
-          delayedRewards[account][timestamp].totalAmount > delayedRewards[account][timestamp].exitedAmount,
+          delayedRewards[account][campaignId].totalAmount > delayedRewards[account][campaignId].exitedAmount,
           "GebUniswapRollingDistributionIncentives/exited-whole-delayed-amount"
         );
-        uint timeElapsedSinceLastExit = sub(block.timestamp, delayedRewards[account][timestamp].latestExitTime);
+        require(campaigns[campaignId].finish < block.timestamp, "GebUniswapRollingDistributionIncentives/vesting-not-yet-started");
+        uint timeElapsedSinceLastExit = sub(block.timestamp, delayedRewards[account][campaignId].latestExitTime);
         require(timeElapsedSinceLastExit > 0, "GebUniswapRollingDistributionIncentives/invalid-time-elapsed");
         uint amountToExit;
         uint rewardDelay = campaigns[campaignId].rewardDelay;
-        if (block.timestamp >= add(timestamp, rewardDelay)) {
-            amountToExit = sub(delayedRewards[account][timestamp].totalAmount, delayedRewards[account][timestamp].exitedAmount);
+        if (block.timestamp >= add(campaigns[campaignId].finish, rewardDelay)) {
+            amountToExit = sub(delayedRewards[account][campaignId].totalAmount, delayedRewards[account][campaignId].exitedAmount);
         } else {
-            amountToExit = mul(div(mul(timeElapsedSinceLastExit, 100), rewardDelay), delayedRewards[account][timestamp].totalAmount) / 100;
+            amountToExit = mul(div(mul(timeElapsedSinceLastExit, 100), rewardDelay), delayedRewards[account][campaignId].totalAmount) / 100;
         }
-        delayedRewards[account][timestamp].latestExitTime = block.timestamp;
-        delayedRewards[account][timestamp].exitedAmount = add(delayedRewards[account][timestamp].exitedAmount, amountToExit);
+        delayedRewards[account][campaignId].latestExitTime = block.timestamp;
+        delayedRewards[account][campaignId].exitedAmount = add(delayedRewards[account][campaignId].exitedAmount, amountToExit);
         if (amountToExit > 0) {
-            globalReward = sub(globalReward,amountToExit);
+            globalReward = sub(globalReward,amountToExit); 
             safeTransfer(rewardToken, account, amountToExit);
         }
     }
 
     /// @notice Wthdraw rewards available, locking the remainder
     /// @param campaignId Id of the campaign
-    function getReward(uint campaignId) public updateReward(msg.sender) nonReentrant {
+    function getReward(uint campaignId) public updateCampaignReward(msg.sender, campaignId) nonReentrant {
         uint256 totalReward = earned(msg.sender, campaignId);
         if (totalReward > 0) {
             campaigns[campaignId].rewards[msg.sender] = 0;
         }
         uint256 instantReward = mul(totalReward, campaigns[campaignId].instantExitPercentage) / THOUSAND;
         uint256 totalDelayedReward = sub(totalReward, instantReward);
+
         if (totalDelayedReward > 0) {
-            delayedRewards[msg.sender][block.timestamp] = DelayedReward(totalDelayedReward, 0, block.timestamp);
-            emit DelayReward(msg.sender, campaignId, block.timestamp, totalDelayedReward);
+            if (delayedRewards[msg.sender][campaignId].totalAmount == 0) delayedRewards[msg.sender][campaignId].latestExitTime = campaigns[campaignId].finish;
+            delayedRewards[msg.sender][campaignId].totalAmount = add(delayedRewards[msg.sender][campaignId].totalAmount, totalDelayedReward);
+            emit DelayReward(msg.sender, campaignId, campaigns[campaignId].finish, totalDelayedReward);
+            if (campaigns[campaignId].finish < block.timestamp) getLockedReward(msg.sender, campaignId);
         }
         if (instantReward > 0) {
             globalReward = sub(globalReward, instantReward);
@@ -291,10 +308,10 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
             reward,
             startTime,
             duration,
-            div(reward, duration),   // rewardRate
-            add(startTime,duration), // finish
-            startTime,               // lastUpdateTime
-            0,                       // rewardPerTokenStored
+            div(reward, duration),           // rewardRate
+            sub(add(startTime,duration), 1), // finish
+            startTime,                       // lastUpdateTime
+            0,                               // rewardPerTokenStored
             (instantExitPercentage == THOUSAND) ? 0 : rewardDelay,
             instantExitPercentage
         );
