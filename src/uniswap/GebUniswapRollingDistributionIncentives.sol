@@ -36,20 +36,24 @@ pragma solidity ^0.6.7;
 
 import "../lp/LPTokenWrapper.sol";
 import "./Auth.sol";
+import "./LinkedList.sol";
 import "../zeppelin/math/Math.sol";
 import "../zeppelin/utils/ReentrancyGuard.sol";
 
 contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, ReentrancyGuard {
+    using LinkedList for LinkedList.List;
+
     // --- Variables ---
     IERC20  public rewardToken;
 
     uint256 public globalReward;
-    uint256 public lastFinish;
     uint256 public campaignCount;
     uint256 public maxCampaigns;
+    uint256 public lastCampaign;
 
-    mapping(address => mapping(uint256 => DelayedReward)) public delayedRewards;
-    mapping(uint => Campaign)                             public campaigns;
+    mapping(address => mapping(uint256 => DelayedReward)) public   delayedRewards;
+    mapping(uint => Campaign)                             public   campaigns;
+    LinkedList.List                                       internal campaignList;
 
     uint256 constant public THOUSAND = 1000;
 
@@ -84,8 +88,7 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
 
     // --- Modifiers ---
     modifier updateReward(address account) {
-        for (uint i = campaignCount; i > 0; i--)
-            _updateReward(account,i);
+        _updateAllCampaigns(account, lastCampaign);
         _;
     }
 
@@ -94,9 +97,19 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
         _;
     }
 
+    // -- Modifier Helpers ---
+    function _updateAllCampaigns(address account, uint campaignId) internal {
+        if (campaignId == 0) return;
+        else if (campaigns[campaignId].rewardPerTokenStored == 0 || campaigns[campaignId].userRewardPerTokenPaid[account] != campaigns[campaignId].rewardPerTokenStored) {
+            _updateReward(account, campaignId);
+            (, uint prevCampaign) = campaignList.prev(campaignId);
+            _updateAllCampaigns(account, prevCampaign);
+        }
+    }
+
     function _updateReward(address account, uint campaignId) internal {
         Campaign storage campaign = campaigns[campaignId];
-        if (campaign.lastUpdateTime != campaign.finish && campaign.startTime != 0 ) {
+        if (campaign.lastUpdateTime != campaign.finish) {
             campaign.rewardPerTokenStored = rewardPerToken(campaignId);
             campaign.lastUpdateTime = lastTimeRewardApplicable(campaignId);
         }
@@ -163,12 +176,16 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
     }
 
     /// @notice Returns Id of currently active campaign, zero if none are active
-    function currentCampaign() public view returns (uint) {
-        if (campaignCount == 0) return 0;
+    function currentCampaign() public returns (uint) { 
+        if (lastCampaign == 0) return 0;
         else
-            for (uint i = campaignCount; campaigns[i].finish >= block.timestamp; i--) {
-                if (campaigns[i].startTime <= block.timestamp) return i;
-            }
+            return _getCurrentCampaign(lastCampaign);
+    }
+
+    function _getCurrentCampaign(uint campaignId) internal returns (uint) {
+        if (campaigns[campaignId].startTime <= block.timestamp) return campaignId;
+        (, uint prevCampaign) = campaignList.prev(campaignId);
+        return (_getCurrentCampaign(prevCampaign));
     }
 
     /// @notice Returns tokens not locked for rewards to caller (only Authority)
@@ -190,9 +207,8 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
     /// @return returns rewards per token staked
     /// @param campaignId Id of the campaign
     function rewardPerToken(uint campaignId) public returns (uint256) {
-        require(campaignId <= campaignCount, "GebUniswapRollingDistributionIncentives/inexistent-campaign");
+        require(campaignList.isNode(campaignId), "GebUniswapRollingDistributionIncentives/invalid-campaign");
         Campaign storage campaign = campaigns[campaignId];
-        require(campaign.startTime != 0, "GebUniswapRollingDistributionIncentives/campaign-cancelled");
         if (totalSupply() == 0 || campaign.lastUpdateTime == lastTimeRewardApplicable(campaignId)) {
             return campaign.rewardPerTokenStored;
         }
@@ -272,6 +288,7 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
     /// @notice Wthdraw rewards available, locking the remainder
     /// @param campaignId Id of the campaign
     function getReward(uint campaignId) public updateCampaignReward(msg.sender, campaignId) nonReentrant {
+        require(campaignList.isNode(campaignId), "GebUniswapRollingDistributionIncentives/invalid-campaign");
         uint256 totalReward = earned(msg.sender, campaignId);
         if (totalReward > 0) {
             campaigns[campaignId].rewards[msg.sender] = 0;
@@ -309,14 +326,14 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
         external
         isAuthority
     {
+        require(campaignList.range() < maxCampaigns, "GebUniswapRollingDistributionIncentives/exceeds-max-campaign-count");
         require(reward > 0, "GebUniswapRollingDistributionIncentives/invalid-reward");
         require(startTime > block.timestamp, "GebUniswapRollingDistributionIncentives/startTime-in-the-past");
-        require(startTime > lastFinish, "GebUniswapRollingDistributionIncentives/startTime-before-last-campaign-finishes");
         require(duration > 0, "GebUniswapRollingDistributionIncentives/invalid-duration");
         require(instantExitPercentage <= THOUSAND, "GebUniswapRollingDistributionIncentives/invalid-instant-exit-percentage");
 
         campaignCount = add(campaignCount, 1);
-        require(campaignCount <= maxCampaigns, "GebUniswapRollingDistributionIncentives/exceeds-max-campaign");
+        require(lastCampaign == 0 || startTime > campaigns[lastCampaign].finish, "GebUniswapRollingDistributionIncentives/startTime-before-last-campaign-finishes");
         campaigns[campaignCount] = Campaign(
             reward,
             startTime,
@@ -328,8 +345,9 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
             (instantExitPercentage == THOUSAND) ? 0 : rewardDelay,
             instantExitPercentage
         );
-        lastFinish = add(startTime, duration);
+        lastCampaign = campaignCount;
         globalReward = add(globalReward,reward);
+        campaignList.push(campaignCount, false);
         emit CampaignAdded(campaignCount);
     }
 
@@ -342,5 +360,16 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
         campaign.duration = 0;
         campaign.finish = 0;
         globalReward = sub(globalReward, campaign.reward);
+
+        // removing from list
+        if (lastCampaign == campaignId)
+            (, lastCampaign) = campaignList.prev(lastCampaign);   
+        
+        campaignList.del(campaignId);
+    }
+
+    /// @notice Campaign list length
+    function campaignListLength() public view returns (uint256) {
+        return campaignList.range();
     }
 }

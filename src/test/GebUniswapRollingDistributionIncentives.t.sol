@@ -718,15 +718,17 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
     // notifyRewardamount
     function testNewCampaign() public {
-        assertEq(pool.lastFinish(), 0);
+        assertEq(pool.lastCampaign(), 0);
         assertEq(pool.globalReward(), 0);
         assertEq(pool.campaignCount(), 0);
+        assertEq(pool.campaignListLength(), 0);
 
         pool.newCampaign(10 ether, now + 1, 21 days, 0, 1000);
 
-        assertEq(pool.lastFinish(), now + 21 days + 1);
+        assertEq(pool.lastCampaign(), 1);
         assertEq(pool.globalReward(), 10 ether);
         assertEq(pool.campaignCount(), 1);
+        assertEq(pool.campaignListLength(), 1);
 
         (
             uint reward,
@@ -798,7 +800,11 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
     function testCancelCampaign() public {
 
         pool.newCampaign(10 ether, now + 1 days, 21 days, rewardDelay, instantExitPercentage);
-        pool.cancelCampaign(1);
+        pool.newCampaign(10 ether, now + 4 weeks, 21 days, rewardDelay, instantExitPercentage);
+
+        assertEq(pool.campaignListLength(), 2);
+        assertEq(pool.lastCampaign(), 2);
+        pool.cancelCampaign(2);
 
         (
             ,
@@ -806,10 +812,18 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
             uint duration,
             ,
             uint finish,,,,
-        ) = pool.campaigns(1);
+        ) = pool.campaigns(2);
         assertEq(startTime, 0);
         assertEq(duration, 0);
         assertEq(finish, 0);
+        assertEq(pool.globalReward(), 10 ether);
+        assertEq(pool.campaignListLength(), 1);
+        assertEq(pool.lastCampaign(), 1);
+
+        // cancelling last campaign
+        pool.cancelCampaign(1);
+        assertEq(pool.campaignListLength(), 0);
+        assertEq(pool.lastCampaign(), 0);
         assertEq(pool.globalReward(), 0);
     }
 
@@ -826,7 +840,6 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         pool.modifyParameters("maxCampaigns", 100);
 
         user1.doApprove(address(lpToken), address(pool), 1 ether);
-        uint gas = gasleft();
         user1.doStake(1 ether);
         uint totalCampaigns = 100;
         for (uint i = 1; i <= totalCampaigns; i++) {
@@ -862,11 +875,18 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         user2.doGetReward(88);
         assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), 1 ether));
 
+        user2.doGetReward(5); // was not staking at the time
+        assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), 1 ether));
+
         user2.doGetReward(95);
         assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), 1.5 ether));
 
         user3.doGetReward(95);
         assertTrue(almostEqual(rewardToken.balanceOf(address(user3)), 0.5 ether));
+
+        user3.doGetReward(1); // was not staking at the time
+        assertTrue(almostEqual(rewardToken.balanceOf(address(user3)), 0.5 ether));
     }
+
 }
 
