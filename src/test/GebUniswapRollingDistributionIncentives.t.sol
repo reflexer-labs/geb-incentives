@@ -1,4 +1,4 @@
-pragma solidity ^0.6.7;
+pragma solidity 0.6.7;
 
 import "ds-test/test.sol";
 import "ds-token/token.sol";
@@ -287,7 +287,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
     // testing reward calculation
     function almostEqual(uint origValue, uint origExpected) public returns (bool) {
-        uint precision = 14; // 1 / 1000 
+        uint precision = 14; // 1 / 1000
         uint value = origValue / (1 * 10 ** precision);
         uint expected = origExpected / (1 * 10 ** precision);
 
@@ -859,7 +859,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
     function testUpdateRewardBounds() public {
 
-        uint maxGas = 6500000; // about half of the mainnet block gas limit 
+        uint maxGas = 6500000; // about half of the mainnet block gas limit
         pool.modifyParameters("maxCampaigns", 100);
 
         user1.doApprove(address(lpToken), address(pool), 1 ether);
@@ -911,4 +911,3 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
     }
 
 }
-

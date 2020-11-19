@@ -32,7 +32,7 @@
 * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 */
 
-pragma solidity ^0.6.7;
+pragma solidity 0.6.7;
 
 import "../lp/LPTokenWrapper.sol";
 import "./Auth.sol";
@@ -123,7 +123,7 @@ contract GebUniswapSingleDistributionIncentives is LPTokenWrapper, Math, Auth, R
         } else if (parameter == "rewardsDuration") {
           require(periodFinish == 0, "GebUniswapSingleDistributionIncentives/distribution-already-set-up");
           rewardsDuration = val;
-        } else if (parameter == "rewardDelay") { 
+        } else if (parameter == "rewardDelay") {
           rewardDelay = val;
         } else if (parameter == "instantExitPercentage") {
           require(val <= THOUSAND, "GebUniswapSingleDistributionIncentives/invalid-instant-exit-percentage");
@@ -161,7 +161,7 @@ contract GebUniswapSingleDistributionIncentives is LPTokenWrapper, Math, Auth, R
     /// @notice Calculate earned tokens up to now
     /// @param account Account of the staker
     /// @return balance earned up to now
-    function earned(address account) public view returns (uint256) { 
+    function earned(address account) public view returns (uint256) {
         return add(div(mul(balanceOf(account), sub(rewardPerToken(), userRewardPerTokenPaid[account])), 1e18), rewards[account]);
     }
 
@@ -183,8 +183,8 @@ contract GebUniswapSingleDistributionIncentives is LPTokenWrapper, Math, Auth, R
 
     /// @notice Used for withdrawing staked tokens
     /// @param amount Amount to be withdrawn
-    function withdraw(uint256 amount) override public updateReward(msg.sender) nonReentrant { 
-        require(amount > 0, "GebUniswapSingleDistributionIncentives/cannot-withdraw-zero"); 
+    function withdraw(uint256 amount) override public updateReward(msg.sender) nonReentrant {
+        require(amount > 0, "GebUniswapSingleDistributionIncentives/cannot-withdraw-zero");
         super.withdraw(amount);
         emit Withdrawn(msg.sender, amount);
     }
@@ -198,7 +198,7 @@ contract GebUniswapSingleDistributionIncentives is LPTokenWrapper, Math, Auth, R
     /// @notice Wthdraw rewards after locking period
     /// @param account Account that owns a reward balance
     /// @param timestamp Timestamp when getReward was called (and instant rewards paid)
-    function getLockedReward(address account, uint timestamp) external nonReentrant { 
+    function getLockedReward(address account, uint timestamp) external nonReentrant {
         require(delayedRewards[account][timestamp].totalAmount > 0, "GebUniswapSingleDistributionIncentives/invalid-slot");
         require(
           delayedRewards[account][timestamp].totalAmount > delayedRewards[account][timestamp].exitedAmount,
@@ -264,6 +264,6 @@ contract GebUniswapSingleDistributionIncentives is LPTokenWrapper, Math, Auth, R
 
         emit RewardAdded(reward);
         uint balance = rewardToken.balanceOf(address(this));
-        require(rewardRate <= div(balance,rewardsDuration), "GebUniswapSingleDistributionIncentives/Provided-reward-too-high");        
+        require(rewardRate <= div(balance,rewardsDuration), "GebUniswapSingleDistributionIncentives/Provided-reward-too-high");
     }
 }

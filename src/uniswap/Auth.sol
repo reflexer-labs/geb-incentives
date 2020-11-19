@@ -1,4 +1,4 @@
-pragma solidity ^0.6.7;
+pragma solidity 0.6.7;
 
 contract Auth {
     // --- Authorities ---
@@ -6,7 +6,7 @@ contract Auth {
     function addAuthority(address account) external isAuthority { authorities[account] = 1; }
     function removeAuthority(address account) external isAuthority { authorities[account] = 0; }
     modifier isAuthority {
-        require(authorities[msg.sender] == 1, "PIScaledPerSecondValidator/not-an-authority");
+        require(authorities[msg.sender] == 1, "Auth/not-an-authority");
         _;
     }
 
