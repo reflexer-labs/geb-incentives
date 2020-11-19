@@ -138,6 +138,20 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         assertEq(pool.maxCampaigns(), 100);
     }
 
+    function testModifyReduceMaxCampaigns() public {
+
+        for (uint i = 1; i <= 30; i++) {
+            pool.newCampaign(1 ether, i * 1 weeks + block.timestamp, 5 days, rewardDelay, instantExitPercentage);
+        }
+        assertEq(pool.firstCampaign(), 1);
+        assertEq(pool.lastCampaign(), 30);
+        assertEq(pool.campaignListLength(), 30);
+        pool.modifyParameters("maxCampaigns", 10);
+        assertEq(pool.firstCampaign(), 21);
+        assertEq(pool.lastCampaign(), 30);
+        assertEq(pool.campaignListLength(), 10);
+    }
+
     function testFailModifyCampaignParametersUnauthorized() public {
         pool.newCampaign(10 ether, now + 1 days, 5 days, 90 days, 500);
 
@@ -719,6 +733,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
     // notifyRewardamount
     function testNewCampaign() public {
         assertEq(pool.lastCampaign(), 0);
+        assertEq(pool.firstCampaign(), 0);
         assertEq(pool.globalReward(), 0);
         assertEq(pool.campaignCount(), 0);
         assertEq(pool.campaignListLength(), 0);
@@ -726,6 +741,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         pool.newCampaign(10 ether, now + 1, 21 days, 0, 1000);
 
         assertEq(pool.lastCampaign(), 1);
+        assertEq(pool.firstCampaign(), 1);
         assertEq(pool.globalReward(), 10 ether);
         assertEq(pool.campaignCount(), 1);
         assertEq(pool.campaignListLength(), 1);
@@ -772,10 +788,14 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         user1.doNewCampaign(10 ether, now + 1, 1 days);
     }
 
-    function testFailExceedsMaxCampaigns() public {
-        for (uint i = 1; i <= 31; i++) {
+    function testRollingMaxCampaigns() public {
+        for (uint i = 1; i <= 60; i++) {
             pool.newCampaign(1 ether, i * 1 weeks + block.timestamp, 5 days, rewardDelay, instantExitPercentage);
         }
+        assertEq(pool.campaignCount(), 60);
+        assertEq(pool.campaignListLength(), 30);
+        assertEq(pool.firstCampaign(), 31);
+        assertEq(pool.lastCampaign(), 60);
     }
 
     function testFailNewCampaignOverlappingCampaigns() public {
@@ -804,6 +824,7 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
 
         assertEq(pool.campaignListLength(), 2);
         assertEq(pool.lastCampaign(), 2);
+        assertEq(pool.firstCampaign(), 1);
         pool.cancelCampaign(2);
 
         (
@@ -819,11 +840,13 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         assertEq(pool.globalReward(), 10 ether);
         assertEq(pool.campaignListLength(), 1);
         assertEq(pool.lastCampaign(), 1);
+        assertEq(pool.firstCampaign(), 1);
 
         // cancelling last campaign
         pool.cancelCampaign(1);
         assertEq(pool.campaignListLength(), 0);
         assertEq(pool.lastCampaign(), 0);
+        assertEq(pool.firstCampaign(), 0);
         assertEq(pool.globalReward(), 0);
     }
 
@@ -844,7 +867,6 @@ contract GebUniswapRollingDistributionIncentivesTest is DSTest {
         uint totalCampaigns = 100;
         for (uint i = 1; i <= totalCampaigns; i++) {
             pool.newCampaign(1 ether, i * 1 weeks + block.timestamp, 5 days, rewardDelay, instantExitPercentage);
-            // hevm.warp(now + 2 weeks);
         }
         hevm.warp(now + 80 weeks);
 

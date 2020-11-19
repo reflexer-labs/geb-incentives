@@ -49,6 +49,7 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
     uint256 public globalReward;
     uint256 public campaignCount;
     uint256 public maxCampaigns;
+    uint256 public firstCampaign;
     uint256 public lastCampaign;
 
     mapping(address => mapping(uint256 => DelayedReward)) public   delayedRewards;
@@ -170,8 +171,14 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
     /// @param val new parameter value
     function modifyParameters(bytes32 parameter, uint256 val) external isAuthority {
         if (parameter == "maxCampaigns") {
-          require(val >= campaignCount, "GebUniswapRollingDistributionIncentives/invalid-max-campaigns");
           maxCampaigns = val;
+
+          while (campaignList.range() > maxCampaigns) {
+                uint campaignToDelete = firstCampaign;
+                (,firstCampaign) = campaignList.next(firstCampaign);
+                campaignList.del(campaignToDelete);
+          }
+
         } else revert("GebUniswapRollingDistributionIncentives/modify-unrecognized-param");
     }
 
@@ -259,7 +266,7 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
         getReward((currentCampaign_ == 0) ? campaignCount : currentCampaign_);
     }
 
-    /// @notice Wthdraw rewards after locking period
+    /// @notice Withdraw rewards after locking period
     /// @param account Account that owns a reward balance
     /// @param campaignId Id of the campaign
     function getLockedReward(address account, uint campaignId) public { 
@@ -326,7 +333,6 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
         external
         isAuthority
     {
-        require(campaignList.range() < maxCampaigns, "GebUniswapRollingDistributionIncentives/exceeds-max-campaign-count");
         require(reward > 0, "GebUniswapRollingDistributionIncentives/invalid-reward");
         require(startTime > block.timestamp, "GebUniswapRollingDistributionIncentives/startTime-in-the-past");
         require(duration > 0, "GebUniswapRollingDistributionIncentives/invalid-duration");
@@ -346,8 +352,15 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
             instantExitPercentage
         );
         lastCampaign = campaignCount;
-        globalReward = add(globalReward,reward);
         campaignList.push(campaignCount, false);
+        if (campaignList.range() == 1) firstCampaign = campaignCount;
+        else if (campaignList.range() > maxCampaigns) {
+            uint campaignToDelete = firstCampaign;
+            (,firstCampaign) = campaignList.next(firstCampaign);
+            campaignList.del(campaignToDelete);
+        }
+
+        globalReward = add(globalReward,reward);
         emit CampaignAdded(campaignCount);
     }
 
@@ -364,6 +377,10 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
         // removing from list
         if (lastCampaign == campaignId)
             (, lastCampaign) = campaignList.prev(lastCampaign);   
+
+        // removing from list
+        if (firstCampaign == campaignId)
+            (, firstCampaign) = campaignList.next(firstCampaign);  
         
         campaignList.del(campaignId);
     }
