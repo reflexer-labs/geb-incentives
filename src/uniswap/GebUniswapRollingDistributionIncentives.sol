@@ -86,6 +86,8 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
     event RewardPaid(address indexed user, uint256 reward);
     event DelayReward(address account, uint campaignId, uint startTime, uint totalDelayedReward);
     event WithdrewExtraRewardTokens(address caller, uint globalReward, uint amount);
+    event ModifyParameters(bytes32 indexed parameter, uint256 data);
+    event ModifyParameters(bytes32 indexed parameter, uint256 campaign, uint256 data);
 
     // --- Modifiers ---
     modifier updateReward(address account) {
@@ -144,6 +146,7 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
               "GebUniswapRollingDistributionIncentives/invalid-reward-delay"
           );
           campaign.rewardDelay = val;
+          emit ModifyParameters(parameter, campaignId, val);
           return;
         }
 
@@ -164,6 +167,8 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
           require(val <= THOUSAND, "GebUniswapRollingDistributionIncentives/invalid-instant-exit-percentage");
           campaign.instantExitPercentage = val;
         } else revert("GebUniswapRollingDistributionIncentives/modify-unrecognized-param");
+
+        emit ModifyParameters(parameter, campaignId, val);
     }
 
     /// @notice Modify Campaign parameters (only authed)
@@ -180,6 +185,7 @@ contract GebUniswapRollingDistributionIncentives is LPTokenWrapper, Math, Auth, 
           }
 
         } else revert("GebUniswapRollingDistributionIncentives/modify-unrecognized-param");
+        emit ModifyParameters(parameter, val);
     }
 
     /// @notice Returns Id of currently active campaign, zero if none are active
