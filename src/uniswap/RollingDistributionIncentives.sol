@@ -357,6 +357,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     /// @param duration Campaign duration
     /// @param rewardDelay Vesting period for locked tokens
     /// @param instantExitPercentage Percentage to be paid immediately on getRewards (1000 == 100%)
+    /// @return The id of the newly created campaign
     function newCampaign
     (
         uint256 reward,
@@ -367,6 +368,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     )
         external
         isAuthorized
+        returns (uint256)
     {
         require(reward > 0, "RollingDistributionIncentives/invalid-reward");
         require(startTime > now, "RollingDistributionIncentives/startTime-in-the-past");
@@ -403,6 +405,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
 
         globalReward = add(globalReward,reward);
         emit CampaignAdded(campaignCount);
+        return campaignCount;
     }
 
     /// @notice Cancel a campaign
