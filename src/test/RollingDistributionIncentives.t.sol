@@ -99,7 +99,7 @@ contract RollingDistributionIncentivesTest is DSTest {
     }
 
     function testConstructor() public {
-        assertEq(pool.authorities(address(this)), 1);
+        assertEq(pool.authorizedAccounts(address(this)), 1);
         assertEq(address(pool.lpToken()), address(lpToken));
         assertEq(address(pool.rewardToken()), address(rewardToken));
     }
