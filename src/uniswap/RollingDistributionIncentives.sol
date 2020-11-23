@@ -67,7 +67,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
 
     uint256 constant public HUNDRED               = 100;
     uint256 constant public THOUSAND              = 1000;
-    uint256 constant public DEFAULT_MAX_CAMPAIGNS = 30;
+    uint256 constant public DEFAULT_MAX_CAMPAIGNS = 12;
     uint256 constant public WAD                   = 1e18;
 
     // --- Structs ---

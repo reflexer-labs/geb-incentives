@@ -137,15 +137,15 @@ contract RollingDistributionIncentivesTest is DSTest {
     }
 
     function testModifyReduceMaxCampaigns() public {
-        for (uint i = 1; i <= 30; i++) {
+        for (uint i = 1; i <= pool.DEFAULT_MAX_CAMPAIGNS(); i++) {
             pool.newCampaign(1 ether, i * 1 weeks + block.timestamp, 5 days, rewardDelay, instantExitPercentage);
         }
         assertEq(pool.firstCampaign(), 1);
-        assertEq(pool.lastCampaign(), 30);
-        assertEq(pool.campaignListLength(), 30);
+        assertEq(pool.lastCampaign(), pool.DEFAULT_MAX_CAMPAIGNS());
+        assertEq(pool.campaignListLength(), pool.DEFAULT_MAX_CAMPAIGNS());
         pool.modifyParameters("maxCampaigns", 10);
-        assertEq(pool.firstCampaign(), 21);
-        assertEq(pool.lastCampaign(), 30);
+        assertEq(pool.firstCampaign(), pool.DEFAULT_MAX_CAMPAIGNS() - 9);
+        assertEq(pool.lastCampaign(), pool.DEFAULT_MAX_CAMPAIGNS());
         assertEq(pool.campaignListLength(), 10);
     }
 
@@ -770,13 +770,13 @@ contract RollingDistributionIncentivesTest is DSTest {
     }
 
     function testRollingMaxCampaigns() public {
-        for (uint i = 1; i <= 60; i++) {
+        for (uint i = 1; i <= pool.DEFAULT_MAX_CAMPAIGNS() * 2; i++) {
             pool.newCampaign(1 ether, i * 1 weeks + block.timestamp, 5 days, rewardDelay, instantExitPercentage);
         }
-        assertEq(pool.campaignCount(), 60);
-        assertEq(pool.campaignListLength(), 30);
-        assertEq(pool.firstCampaign(), 31);
-        assertEq(pool.lastCampaign(), 60);
+        assertEq(pool.campaignCount(), pool.DEFAULT_MAX_CAMPAIGNS() * 2);
+        assertEq(pool.campaignListLength(), pool.DEFAULT_MAX_CAMPAIGNS());
+        assertEq(pool.firstCampaign(), pool.DEFAULT_MAX_CAMPAIGNS() + 1);
+        assertEq(pool.lastCampaign(), pool.DEFAULT_MAX_CAMPAIGNS() * 2);
     }
 
     function testFailNewCampaignOverlappingCampaigns() public {
@@ -835,7 +835,7 @@ contract RollingDistributionIncentivesTest is DSTest {
     }
 
     function testUpdateRewardBounds() public {
-        uint maxGas = 7000000; // a bit more than half of the mainnet block gas limit
+        uint maxGas = 7000000;  // a bit more than half of the mainnet block gas limit
         pool.modifyParameters("maxCampaigns", 100);
 
         user1.doApprove(address(lpToken), address(pool), 1 ether);
