@@ -102,32 +102,42 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
 
     // --- Modifiers ---
     modifier updateReward(address account) {
-        _updateAllCampaigns(account, lastCampaign);
+        _updateRewards(account, lastCampaign);
         _;
     }
     modifier updateCampaignReward(address account, uint256 campaignId) {
-        _updateReward(account, campaignId);
+        _updateRewards(account, campaignId);
         _;
     }
 
-    // -- Modifier Helpers ---
-    function _updateAllCampaigns(address account, uint256 campaignId) internal {
-        if (campaignId == 0) return;
-        else if (campaigns[campaignId].rewardPerTokenStored == 0 || campaigns[campaignId].userRewardPerTokenPaid[account] != campaigns[campaignId].rewardPerTokenStored) {
-            _updateReward(account, campaignId);
-            (, uint256 prevCampaign) = campaignList.prev(campaignId);
-            _updateAllCampaigns(account, prevCampaign);
-        }
-    }
-
-    function _updateReward(address account, uint256 campaignId) internal {
+    /// @notice Modifier helper, calculates rewards
+    /// @dev Will recursively iterate campaigns, updating campaign data and user data when needed. 
+    /// @dev It is bounded by the number of campaigns that need update (and will only update campaign or user data as necessary).
+    /// @dev Users are their own keepers, so frequent users will not incur in high costs (the longer the user is inactive, the higher the gas cost).
+    /// @dev Ultimately bounded by maxCampaigns. 
+    /// @param account User address
+    /// @param campaignId campaign id   
+    function _updateRewards(address account, uint256 campaignId) internal {
+        if (campaignId == 0) return; // isnode
         Campaign storage campaign = campaigns[campaignId];
-        if (campaign.lastUpdateTime != finish(campaignId)) {
+        bool update;
+
+        if (campaign.lastUpdateTime != finish(campaignId)) { // campaign needs update
             campaign.rewardPerTokenStored = rewardPerToken(campaignId);
             campaign.lastUpdateTime = lastTimeRewardApplicable(campaignId);
+            update = true;
         }
-        campaign.rewards[account] = earned(account, campaignId);
-        campaign.userRewardPerTokenPaid[account] = campaign.rewardPerTokenStored;
+        if (campaign.userRewardPerTokenPaid[account] != campaign.rewardPerTokenStored) { // user needs update 
+            campaign.rewards[account] = earned(account, campaignId);
+            campaign.userRewardPerTokenPaid[account] = campaign.rewardPerTokenStored;
+            if (finish(campaignId) > block.timestamp || balanceOf(account) > 0)
+                update = true;
+        }
+
+        if (update) { // keep on going backwards through the list until it finds a campaigns that is up to date.
+            (, uint256 prevCampaign) = campaignList.prev(campaignId);
+            _updateRewards(account, prevCampaign);
+        }
     }
 
     constructor(
@@ -221,7 +231,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     }
 
     // --- Distribution Logic ---
-    /// @notice Returns last time distribution was active (now if currently active)
+    /// @notice Returns last time distribution was active (now if currently active, startTime if in the future)
     /// @param campaignId Id of the campaign
     function lastTimeRewardApplicable(uint256 campaignId) public view returns (uint256) {
         return min(max(now, campaigns[campaignId].startTime), finish(campaignId));
