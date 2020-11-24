@@ -9,4 +9,5 @@ before_install:
   - git clone --recursive https://github.com/dapphub/dapptools $HOME/.dapp/dapptools
   - nix-env -f https://github.com/makerdao/makerpkgs/tarball/master -iA dappPkgsVersions.hevm-0_41_0.dapp
 script:
+  - export SOLC_FLAGS="--optimize --optimize-runs 200"
   - dapp --use solc:0.6.7 test
