@@ -96,6 +96,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 reward);
     event DelayReward(address account, uint256 campaignId, uint256 startTime, uint256 totalDelayedReward);
+    event DelayedRewardPaid(address indexed user, uint256 campaignId, uint256 reward);
     event WithdrewExtraRewardTokens(address caller, uint256 globalReward, uint256 amount);
     event ModifyParameters(bytes32 indexed parameter, uint256 data);
     event ModifyParameters(bytes32 indexed parameter, uint256 campaign, uint256 data);
@@ -318,6 +319,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         if (amountToExit > 0) {
             globalReward = sub(globalReward,amountToExit);
             safeTransfer(rewardToken, account, amountToExit);
+            emit DelayedRewardPaid(account, campaignId, amountToExit);
         }
     }
 
