@@ -96,6 +96,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 reward);
     event DelayReward(address account, uint256 campaignId, uint256 startTime, uint256 totalDelayedReward);
+    event DelayedRewardPaid(address indexed user, uint256 campaignId, uint256 reward);
     event WithdrewExtraRewardTokens(address caller, uint256 globalReward, uint256 amount);
     event ModifyParameters(bytes32 indexed parameter, uint256 data);
     event ModifyParameters(bytes32 indexed parameter, uint256 campaign, uint256 data);
@@ -198,7 +199,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     }
 
     /// @return The id of currently active campaign, zero if none are active
-    function currentCampaign() public returns (uint256) {
+    function currentCampaign() public view returns (uint256) {
         if (lastCampaign == 0) {
           return 0;
         }
@@ -206,7 +207,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     }
 
     /// @return The id of the current running campaign
-    function _getCurrentCampaign(uint256 campaignId) internal returns (uint256) {
+    function _getCurrentCampaign(uint256 campaignId) internal view returns (uint256) {
         if (campaigns[campaignId].startTime <= now) return campaignId;
         (, uint256 prevCampaign) = campaignList.prev(campaignId);
         return (_getCurrentCampaign(prevCampaign));
@@ -230,7 +231,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     /// @notice Rewards per token staked
     /// @param campaignId Id of the campaign
     /// @return returns rewards per token staked
-    function rewardPerToken(uint256 campaignId) public returns (uint256) {
+    function rewardPerToken(uint256 campaignId) public view returns (uint256) {
         require(campaignList.isNode(campaignId), "RollingDistributionIncentives/invalid-campaign");
         Campaign storage campaign = campaigns[campaignId];
         if (totalSupply() == 0 || campaign.lastUpdateTime == lastTimeRewardApplicable(campaignId)) {
@@ -247,7 +248,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     /// @param account Account of the staker
     /// @param campaignId Id of the campaign
     /// @return balance earned up to now
-    function earned(address account, uint256 campaignId) public returns (uint256) {
+    function earned(address account, uint256 campaignId) public view returns (uint256) {
         Campaign storage campaign = campaigns[campaignId];
         return add(
           div(mul(balanceOf(account), sub(rewardPerToken(campaignId), campaign.userRewardPerTokenPaid[account])), WAD),
@@ -318,6 +319,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         if (amountToExit > 0) {
             globalReward = sub(globalReward,amountToExit);
             safeTransfer(rewardToken, account, amountToExit);
+            emit DelayedRewardPaid(account, campaignId, amountToExit);
         }
     }
 
@@ -439,5 +441,19 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     /// @return The timestamp at which a campaign ends
     function finish(uint256 campaignId) public view returns (uint256) {
         return add(campaigns[campaignId].startTime, campaigns[campaignId].duration);
+    }
+
+    /// @param owner Account that holds rewards
+    /// @param campaignId The id of a campaign
+    /// @return Rewards from the account
+    function rewards(address owner, uint campaignId) public view returns (uint) {
+        return campaigns[campaignId].rewards[owner];
+    }
+
+    /// @param owner Account that holds rewards
+    /// @param campaignId The id of a campaign
+    /// @return userRewardPerTokenPaid from the account
+    function userRewardPerTokenPaid(address owner, uint campaignId) public view returns (uint) {
+        return campaigns[campaignId].userRewardPerTokenPaid[owner];
     }
 }
