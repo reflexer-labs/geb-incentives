@@ -67,7 +67,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
 
     uint256 constant public HUNDRED               = 100;
     uint256 constant public THOUSAND              = 1000;
-    uint256 constant public DEFAULT_MAX_CAMPAIGNS = 12;
+    uint256 constant public DEFAULT_MAX_CAMPAIGNS = 15;
     uint256 constant public WAD                   = 1e18;
 
     // --- Structs ---
@@ -112,12 +112,12 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     }
 
     /// @notice Modifier helper, calculates rewards
-    /// @dev Will recursively iterate campaigns, updating campaign data and user data when needed. 
+    /// @dev Will recursively iterate campaigns, updating campaign data and user data when needed.
     /// @dev It is bounded by the number of campaigns that need update (and will only update campaign or user data as necessary).
     /// @dev Users are their own keepers, so frequent users will not incur in high costs (the longer the user is inactive, the higher the gas cost).
-    /// @dev Ultimately bounded by maxCampaigns. 
+    /// @dev Ultimately bounded by maxCampaigns.
     /// @param account User address
-    /// @param campaignId campaign id   
+    /// @param campaignId campaign id
     function _updateRewards(address account, uint256 campaignId) internal {
         if (campaignId == 0) return; // isnode
         Campaign storage campaign = campaigns[campaignId];
@@ -128,7 +128,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
             campaign.lastUpdateTime = lastTimeRewardApplicable(campaignId);
             update = true;
         }
-        if (campaign.userRewardPerTokenPaid[account] != campaign.rewardPerTokenStored) { // user needs update 
+        if (campaign.userRewardPerTokenPaid[account] != campaign.rewardPerTokenStored) { // user needs update
             campaign.rewards[account] = earned(account, campaignId);
             campaign.userRewardPerTokenPaid[account] = campaign.rewardPerTokenStored;
             if (finish(campaignId) > block.timestamp || balanceOf(account) > 0)
