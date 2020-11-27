@@ -835,7 +835,7 @@ contract RollingDistributionIncentivesTest is DSTest {
     }
 
     function testUpdateRewardBounds() public {
-        uint maxGas = 7000000;  // a bit more than half of the mainnet block gas limit
+        uint maxGas = 6600000;  // a bit more than half of the mainnet block gas limit
         pool.modifyParameters("maxCampaigns", 100);
 
         user1.doApprove(address(lpToken), address(pool), 1 ether);
@@ -862,6 +862,9 @@ contract RollingDistributionIncentivesTest is DSTest {
         hevm.warp(now + 14 weeks);
 
         user1.doGetReward(1);
+        assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), 1 ether));
+
+        user1.doGetReward(1); // no rewards
         assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), 1 ether));
 
         user1.doGetReward(5);
