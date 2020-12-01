@@ -73,7 +73,7 @@ contract RollingDistributionIncentivesTest is DSTest {
 
     uint rewardDelay           = 12 days;
     uint instantExitPercentage = 500; // 50%
-    uint initialBalance        = 100 ether;
+    uint initialBalance        = 1000000000000 ether;
 
     function setUp() public {
         hevm = Hevm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
@@ -93,7 +93,7 @@ contract RollingDistributionIncentivesTest is DSTest {
         lpToken.mint(address(user1), initialBalance);
         lpToken.mint(address(user2), initialBalance);
         lpToken.mint(address(user3), initialBalance);
-        rewardToken.mint(address(pool), 100 ether);
+        rewardToken.mint(address(pool), initialBalance);
 
         hevm.warp(now + 1000);
     }
@@ -204,7 +204,7 @@ contract RollingDistributionIncentivesTest is DSTest {
         pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
         assertEq(rewardToken.balanceOf(address(this)), 0);
         pool.withdrawExtraRewardTokens();
-        assertEq(rewardToken.balanceOf(address(this)), 90 ether);
+        assertEq(rewardToken.balanceOf(address(this)),initialBalance - 10 ether);
     }
 
     function testFailWithdrawNoExtraBalance() public {
@@ -283,8 +283,11 @@ contract RollingDistributionIncentivesTest is DSTest {
         uint value = origValue / (1 * 10 ** precision);
         uint expected = origExpected / (1 * 10 ** precision);
 
+        emit log_named_uint("value", value);
+        emit log_named_uint("expected", expected);
+
         return (
-            value >= expected - 1 && value <= expected + 1
+            value >= expected - 10 && value <= expected + 10
         );
     }
 
@@ -501,14 +504,6 @@ contract RollingDistributionIncentivesTest is DSTest {
         assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), (12 ether * instantExitPercentage) / 1000));
         assertTrue(almostEqual(rewardToken.balanceOf(address(user3)), (18666666666666666666 * instantExitPercentage) / 1000));
 
-        user1.doGetReward(1);
-        user2.doGetReward(1);
-        user3.doGetReward(1);
-
-        assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), (5333333333333333333 * instantExitPercentage) / 1000));
-        assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), (12 ether * instantExitPercentage) / 1000));
-        assertTrue(almostEqual(rewardToken.balanceOf(address(user3)), (18666666666666666666 * instantExitPercentage) / 1000));
-
         // checking locked rewards
         (uint totalAmount, uint exitedAmount, uint lastExitTime) = pool.delayedRewards(address(user1), 1);
         assertTrue(almostEqual(totalAmount, 5333333333333333333 - ((5333333333333333333 * instantExitPercentage) / 1000)));
@@ -529,7 +524,6 @@ contract RollingDistributionIncentivesTest is DSTest {
    function testGetReward2() public {
         user1.doApprove(address(lpToken), address(pool), 1 ether);
         pool.modifyParameters("maxCampaigns", 100);
-        uint gas = gasleft();
         user1.doStake(1 ether);
         uint totalCampaigns = 80;
         for (uint i = 1; i <= totalCampaigns; i++) {
@@ -616,6 +610,33 @@ contract RollingDistributionIncentivesTest is DSTest {
         assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), instantReward + amountLocked));
     }
 
+    function testGetLockedReward2() public {
+        // testing get locked rewards with smallest interval possible (one block, around 15secs)
+        pool.newCampaign(1000 ether, now + 1, 21 days, 16 weeks, instantExitPercentage);
+
+        user1.doApprove(address(lpToken), address(pool), 1 ether);
+        user1.doStake(1 ether);
+        user2.doApprove(address(lpToken), address(pool), 1 ether);
+        user2.doStake(1 ether);
+
+        hevm.warp(now + 21 days);
+
+        user1.doGetReward(1); // 500 tokens each
+
+        uint instantReward = (500 ether * instantExitPercentage) / 1000;
+        uint amountLocked = 500 ether - instantReward;
+
+        hevm.warp(now + 2); // start of vesting
+        // uint interval = 1 minutes; // works, though it takes long
+        uint interval = 1 hours; // default value for quick testing/CI
+        for (uint i = 1; i <= 16 weeks / interval; i++) {
+            hevm.warp(now + interval);
+            user1.doGetLockedReward(address(user1), 1);
+            emit log_named_uint("i", i);
+        }
+        assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), instantReward + amountLocked));
+    }
+
     function testFailGetLockedRewardNoBalance() public {
         pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
 
@@ -625,8 +646,6 @@ contract RollingDistributionIncentivesTest is DSTest {
         hevm.warp(now + 21 days);
 
         user1.doGetReward(1); // 10
-
-        uint rewardTime = now;
 
         hevm.warp(now + rewardDelay);
 
@@ -864,9 +883,6 @@ contract RollingDistributionIncentivesTest is DSTest {
         user1.doGetReward(1);
         assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), 1 ether));
 
-        user1.doGetReward(1); // no rewards
-        assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), 1 ether));
-
         user1.doGetReward(5);
         assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), 2 ether));
 
@@ -876,16 +892,31 @@ contract RollingDistributionIncentivesTest is DSTest {
         user2.doGetReward(88);
         assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), 1 ether));
 
-        user2.doGetReward(5); // was not staking at the time
-        assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), 1 ether));
-
         user2.doGetReward(95);
         assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), 1.5 ether));
 
         user3.doGetReward(95);
         assertTrue(almostEqual(rewardToken.balanceOf(address(user3)), 0.5 ether));
+    }
 
-        user3.doGetReward(1); // was not staking at the time
-        assertTrue(almostEqual(rewardToken.balanceOf(address(user3)), 0.5 ether));
+    function testFailGetRewardsNoReward() public {
+
+        pool.modifyParameters("maxCampaigns", 30);
+
+        uint totalCampaigns = 25;
+        for (uint i = 1; i <= totalCampaigns; i++) {
+            pool.newCampaign(1 ether, i * 1 weeks + block.timestamp, 5 days, rewardDelay, instantExitPercentage);
+        }
+        hevm.warp(now + 10 weeks);
+
+        user2.doApprove(address(lpToken), address(pool), 1 ether);
+        user2.doStake(1 ether); 
+
+        hevm.warp(now + 10 weeks);
+
+        user2.doGetReward(12);
+        assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), 1 ether));
+
+        user2.doGetReward(2); // was not staking at the time
     }
 }
