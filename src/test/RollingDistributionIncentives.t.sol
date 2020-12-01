@@ -756,6 +756,7 @@ contract RollingDistributionIncentivesTest is DSTest {
         assertEq(pool.globalReward(), 0);
         assertEq(pool.campaignCount(), 0);
         assertEq(pool.campaignListLength(), 0);
+        assertEq(pool.contractEnabled(), 1);
 
         pool.newCampaign(10 ether, now + 1, 21 days, 0, 1000);
 
@@ -764,6 +765,7 @@ contract RollingDistributionIncentivesTest is DSTest {
         assertEq(pool.globalReward(), 10 ether);
         assertEq(pool.campaignCount(), 1);
         assertEq(pool.campaignListLength(), 1);
+        assertEq(pool.contractEnabled(), 1);
 
         (
             uint reward,
@@ -935,5 +937,36 @@ contract RollingDistributionIncentivesTest is DSTest {
         assertTrue(almostEqual(rewardToken.balanceOf(address(user2)), 1 ether));
 
         user2.doGetReward(2); // was not staking at the time
+    }
+
+    function testDisableContract() public {
+        pool.newCampaign(1 ether, 1 weeks + block.timestamp, 5 days, rewardDelay, instantExitPercentage);
+        pool.disableContract();
+        assertEq(pool.contractEnabled(), 0);
+    }
+
+    function testFailDisableContractUnauthorized() public {
+        pool.newCampaign(1 ether, 1 weeks + block.timestamp, 5 days, rewardDelay, instantExitPercentage);
+        pool.removeAuthorization(address(this));
+        pool.disableContract();
+    }
+
+    function testFailStakeInDisabledContract() public {
+        pool.newCampaign(1 ether, 1 weeks + block.timestamp, 5 days, rewardDelay, instantExitPercentage);
+        pool.disableContract();
+        assertEq(pool.contractEnabled(), 0);
+
+        user2.doApprove(address(lpToken), address(pool), 1 ether);
+        user2.doStake(1 ether); 
+    }
+
+    function testWithdrawFromDisabledContract() public {
+        user2.doApprove(address(lpToken), address(pool), 1 ether);
+        user2.doStake(1 ether); 
+        pool.newCampaign(1 ether, 1 weeks + block.timestamp, 5 days, rewardDelay, instantExitPercentage);
+        pool.disableContract();
+        assertEq(pool.contractEnabled(), 0);
+
+        user2.doWithdraw(1 ether); 
     }
 }
