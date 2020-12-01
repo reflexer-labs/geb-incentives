@@ -46,7 +46,6 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     // --- Variables ---
     // The token used to reward stakers
     IERC20  public rewardToken;
-
     // The total amount of rewards that were and will be distributed
     uint256 public globalReward;
     // The total amount of campaigns ever created
@@ -57,6 +56,8 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     uint256 public firstCampaign;
     // The latest scheduled campaign
     uint256 public lastCampaign;
+    // Access flag, indicates whether this contract is still active
+    uint256  public contractEnabled;
 
     // Rewards to be unlocked for each campaign
     mapping(address => mapping(uint256 => DelayedReward)) public   delayedRewards;
@@ -67,6 +68,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
 
     uint256 constant public HUNDRED               = 100;
     uint256 constant public THOUSAND              = 1000;
+    uint256 constant public MILLION               = 1000000;
     uint256 constant public DEFAULT_MAX_CAMPAIGNS = 15;
     uint256 constant public WAD                   = 1e18;
 
@@ -95,6 +97,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     event Staked(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
     event RewardPaid(address indexed user, uint256 reward);
+    event DisableContract();
     event DelayReward(address account, uint256 campaignId, uint256 startTime, uint256 totalDelayedReward);
     event DelayedRewardPaid(address indexed user, uint256 campaignId, uint256 reward);
     event WithdrewExtraRewardTokens(address caller, uint256 globalReward, uint256 amount);
@@ -103,7 +106,8 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
 
     // --- Modifiers ---
     modifier updateReward(address account) {
-        _updateRewards(account, lastCampaign);
+        if (contractEnabled == 1)
+            _updateRewards(account, lastCampaign);
         _;
     }
     modifier updateCampaignReward(address account, uint256 campaignId) {
@@ -119,7 +123,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     /// @param account User address
     /// @param campaignId campaign id
     function _updateRewards(address account, uint256 campaignId) internal {
-        if (campaignId == 0) return; // isnode
+        if (campaignId == 0) return; 
         Campaign storage campaign = campaigns[campaignId];
         bool update;
 
@@ -150,6 +154,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         lpToken      = IERC20(lpToken_);
         rewardToken  = IERC20(rewardToken_);
         maxCampaigns = DEFAULT_MAX_CAMPAIGNS;
+        contractEnabled = 1;
     }
 
     // --- Administration ---
@@ -278,6 +283,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     function stake(uint256 amount, address owner) override public updateReward(owner) nonReentrant {
         require(amount > 0, "RollingDistributionIncentives/cannot-stake-zero");
         require(owner != address(0), "RollingDistributionIncentives/invalid-owner");
+        require(contractEnabled == 1, "RollingDistributionIncentives/contract-disabled");
         super.stake(amount, owner);
         emit Staked(owner, amount);
     }
@@ -318,19 +324,19 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
             amountToExit = sub(delayedRewards[account][campaignId].totalAmount, delayedRewards[account][campaignId].exitedAmount);
         } else {
             amountToExit = mul(
-              div(mul(timeElapsedSinceLastExit, HUNDRED), rewardDelay),
+              div(mul(timeElapsedSinceLastExit, MILLION), rewardDelay),
               delayedRewards[account][campaignId].totalAmount
-            ) / HUNDRED;
+            ) / MILLION;
         }
+
+        require(amountToExit > 0, "RollingDistributionIncentives/no-rewards");
 
         delayedRewards[account][campaignId].latestExitTime = now;
         delayedRewards[account][campaignId].exitedAmount = add(delayedRewards[account][campaignId].exitedAmount, amountToExit);
 
-        if (amountToExit > 0) {
-            globalReward = sub(globalReward,amountToExit);
-            safeTransfer(rewardToken, account, amountToExit);
-            emit DelayedRewardPaid(account, campaignId, amountToExit);
-        }
+        globalReward = sub(globalReward,amountToExit);
+        safeTransfer(rewardToken, account, amountToExit);
+        emit DelayedRewardPaid(account, campaignId, amountToExit);
     }
 
     /// @notice Wthdraw rewards available, locking the remainder
@@ -341,6 +347,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         if (totalReward > 0) {
             campaigns[campaignId].rewards[msg.sender] = 0;
         }
+        require(totalReward > 0, "RollingDistributionIncentives/no-rewards-available");
         uint256 instantReward      = mul(totalReward, campaigns[campaignId].instantExitPercentage) / THOUSAND;
         uint256 totalDelayedReward = sub(totalReward, instantReward);
 
@@ -465,5 +472,13 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     /// @return userRewardPerTokenPaid from the account
     function userRewardPerTokenPaid(address owner, uint campaignId) public view returns (uint) {
         return campaigns[campaignId].userRewardPerTokenPaid[owner];
+    }
+
+    /**
+     * @notice Disable this contract
+     */
+    function disableContract() external isAuthorized {
+        contractEnabled = 0;
+        emit DisableContract();
     }
 }
