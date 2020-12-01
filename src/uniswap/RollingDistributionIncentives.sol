@@ -57,7 +57,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     // The latest scheduled campaign
     uint256 public lastCampaign;
     // Access flag, indicates whether this contract is still active
-    uint256  public contractEnabled;
+    uint256 public contractEnabled;
 
     // Rewards to be unlocked for each campaign
     mapping(address => mapping(uint256 => DelayedReward)) public   delayedRewards;
@@ -123,7 +123,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     /// @param account User address
     /// @param campaignId campaign id
     function _updateRewards(address account, uint256 campaignId) internal {
-        if (campaignId == 0) return; 
+        if (campaignId == 0) return;
         Campaign storage campaign = campaigns[campaignId];
         bool update;
 
@@ -151,9 +151,9 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     ) public {
         require(lpToken_ != address(0), "RollingDistributionIncentives/invalid-lp-token");
         require(rewardToken_ != address(0), "RollingDistributionIncentives/invalid-reward-token");
-        lpToken      = IERC20(lpToken_);
-        rewardToken  = IERC20(rewardToken_);
-        maxCampaigns = DEFAULT_MAX_CAMPAIGNS;
+        lpToken         = IERC20(lpToken_);
+        rewardToken     = IERC20(rewardToken_);
+        maxCampaigns    = DEFAULT_MAX_CAMPAIGNS;
         contractEnabled = 1;
     }
 
@@ -281,9 +281,9 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     /// @param amount Amount to be staked
     /// @param owner Account that will own both the rewards and liquidity
     function stake(uint256 amount, address owner) override public updateReward(owner) nonReentrant {
+        require(contractEnabled == 1, "RollingDistributionIncentives/contract-disabled");
         require(amount > 0, "RollingDistributionIncentives/cannot-stake-zero");
         require(owner != address(0), "RollingDistributionIncentives/invalid-owner");
-        require(contractEnabled == 1, "RollingDistributionIncentives/contract-disabled");
         super.stake(amount, owner);
         emit Staked(owner, amount);
     }
