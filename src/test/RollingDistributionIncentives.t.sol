@@ -283,9 +283,6 @@ contract RollingDistributionIncentivesTest is DSTest {
         uint value = origValue / (1 * 10 ** precision);
         uint expected = origExpected / (1 * 10 ** precision);
 
-        emit log_named_uint("value", value);
-        emit log_named_uint("expected", expected);
-
         return (
             value >= expected - 10 && value <= expected + 10
         );
@@ -471,6 +468,24 @@ contract RollingDistributionIncentivesTest is DSTest {
         assertEq(pool.earned(address(user1), 1), 0);
     }
 
+    function testRewardCalculation6() public { // one staker, one distribution, 1 sec
+        pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now+1);
+        assertEq(pool.rewardPerToken(1), 0);
+        assertEq(pool.earned(address(user1), 1), 0);
+        assertEq(pool.earned(address(user2), 1), 0);
+
+        user1.doApprove(address(lpToken), address(pool), 1 ether);
+        user1.doStake(1 ether);
+
+        assertEq(pool.rewardPerToken(1), 0);
+        assertEq(pool.earned(address(user1), 1), 0);
+        assertEq(pool.earned(address(user2), 1), 0);
+
+        hevm.warp(now + 1); // 1 sec
+        assertTrue(pool.earned(address(user1), 1) > 0);
+    }
+
     // getReward
     function testGetReward() public {
         //
@@ -627,13 +642,15 @@ contract RollingDistributionIncentivesTest is DSTest {
         uint amountLocked = 500 ether - instantReward;
 
         hevm.warp(now + 2); // start of vesting
-        // uint interval = 1 minutes; // works, though it takes long
-        uint interval = 1 hours; // default value for quick testing/CI
-        for (uint i = 1; i <= 16 weeks / interval; i++) {
+        uint interval = 10; // 10 seconds
+        for (uint i = 1; i <= 20; i++) {
             hevm.warp(now + interval);
             user1.doGetLockedReward(address(user1), 1);
-            emit log_named_uint("i", i);
+            assertTrue(rewardToken.balanceOf(address(user1)) > instantReward); // increases per sec
         }
+
+        hevm.warp(now + 16 weeks); // end of vesting
+        user1.doGetLockedReward(address(user1), 1);
         assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), instantReward + amountLocked));
     }
 

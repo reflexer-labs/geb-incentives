@@ -329,14 +329,14 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
             ) / MILLION;
         }
 
+        require(amountToExit > 0, "RollingDistributionIncentives/no-rewards");
+
         delayedRewards[account][campaignId].latestExitTime = now;
         delayedRewards[account][campaignId].exitedAmount = add(delayedRewards[account][campaignId].exitedAmount, amountToExit);
 
-        if (amountToExit > 0) {
-            globalReward = sub(globalReward,amountToExit);
-            safeTransfer(rewardToken, account, amountToExit);
-            emit DelayedRewardPaid(account, campaignId, amountToExit);
-        }
+        globalReward = sub(globalReward,amountToExit);
+        safeTransfer(rewardToken, account, amountToExit);
+        emit DelayedRewardPaid(account, campaignId, amountToExit);
     }
 
     /// @notice Wthdraw rewards available, locking the remainder
