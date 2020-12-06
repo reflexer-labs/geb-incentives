@@ -4,7 +4,7 @@
  _\ \ / // // _ \/ __// _ \/ -_)/ __// / \ \ /
 /___/ \_, //_//_/\__//_//_/\__/ \__//_/ /_\_\
      /___/
-* Synthetix: GebUniswapIncentives.sol
+* Synthetix
 *
 * Docs: https://docs.synthetix.io/
 *
