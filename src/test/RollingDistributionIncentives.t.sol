@@ -1132,7 +1132,7 @@ contract RollingDistributionIncentivesTest is DSTest {
     }
 
     function testUpdateRewardBounds() public {
-        uint maxGas = 6600000;  // a bit more than half of the mainnet block gas limit
+        uint maxGas = 7000000;  // a bit more than half of the mainnet block gas limit
         pool.modifyParameters("maxCampaigns", 100);
 
         user1.doApprove(address(lpToken), address(pool), 1 ether);
