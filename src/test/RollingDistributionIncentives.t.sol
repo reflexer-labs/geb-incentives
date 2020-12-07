@@ -339,6 +339,30 @@ contract RollingDistributionIncentivesTest is DSTest {
         user1.doStake(0.5 ether);
     }
 
+    function testStakeAfterMaxCampaignsModified() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 5 days + 1);
+
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        pool.modifyParameters("maxCampaigns", pool.maxCampaigns() - 1);
+
+        assertEq(pool.currentCampaign(), 1);
+        user1.doApprove(address(lpToken), address(pool), 0.5 ether);
+        user1.doStake(0.5 ether);
+
+        hevm.warp(now + 5 days + 1);
+
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        pool.modifyParameters("maxCampaigns", 1);
+
+        assertEq(pool.currentCampaign(), 0);
+        hevm.warp(now + 1);
+        assertEq(pool.currentCampaign(), 3);
+
+        user1.doApprove(address(lpToken), address(pool), 0.5 ether);
+        user1.doStake(0.5 ether);
+    }
+
     // withdraw
     function testWithdraw() public {
         pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
