@@ -221,6 +221,9 @@ contract RollingDistributionIncentivesTest is DSTest {
 
     // stake
     function testStake() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1);
+
         user1.doApprove(address(lpToken), address(pool), 1 ether);
         user1.doStake(1 ether);
 
@@ -231,6 +234,9 @@ contract RollingDistributionIncentivesTest is DSTest {
     }
 
     function testStakeFor() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1);
+
         user1.doApprove(address(lpToken), address(pool), 1 ether);
         user1.doStakeFor(1 ether, address(0xabc));
 
@@ -252,6 +258,9 @@ contract RollingDistributionIncentivesTest is DSTest {
 
     // withdraw
     function testWithdraw() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1);
+
         user1.doApprove(address(lpToken), address(pool), 1 ether);
         user1.doStake(1 ether);
 
@@ -261,6 +270,77 @@ contract RollingDistributionIncentivesTest is DSTest {
         assertEq(pool.balanceOf(address(user1)), 0.5 ether);
         assertEq(lpToken.balanceOf(address(pool)), 0.5 ether);
         assertEq(lpToken.balanceOf(address(user1)), initialBalance - 0.5 ether);
+    }
+
+    function testWithdrawStakedMidCampaign() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1 + 2.5 days);
+
+        user1.doApprove(address(lpToken), address(pool), 1 ether);
+        user1.doStake(1 ether);
+
+        hevm.warp(now + 2.5 days);
+        assertEq(pool.totalSupply(), 1 ether);
+        assertEq(pool.balanceOf(address(user1)), 1 ether);
+        assertEq(lpToken.balanceOf(address(pool)), 1 ether);
+        assertEq(lpToken.balanceOf(address(user1)), initialBalance - 1 ether);
+    }
+
+    function testMultiWithdraw() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+
+        hevm.warp(now + 1);
+        user1.doApprove(address(lpToken), address(pool), 1 ether);
+        user1.doStake(1 ether);
+
+        hevm.warp(now + 2.5 days);
+        user2.doApprove(address(lpToken), address(pool), 1 ether);
+        user2.doStake(1 ether);
+
+        hevm.warp(now + 1 days);
+        user1.doWithdraw(0.5 ether);
+        user2.doWithdraw(0.5 ether);
+
+        hevm.warp(now + 1.5 days);
+        assertEq(pool.totalSupply(), 1 ether);
+        assertEq(pool.balanceOf(address(user2)), 0.5 ether);
+        assertEq(pool.balanceOf(address(user1)), 0.5 ether);
+        assertEq(lpToken.balanceOf(address(pool)), 1 ether);
+        assertEq(lpToken.balanceOf(address(user2)), initialBalance - 0.5 ether);
+        assertEq(lpToken.balanceOf(address(user1)), initialBalance - 0.5 ether);
+    }
+
+    function testMultiWithdrawAfterMultiCampaigns() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 2.5 days + 1);
+
+        user1.doApprove(address(lpToken), address(pool), 1 ether);
+        user1.doStake(1 ether);
+        user2.doApprove(address(lpToken), address(pool), 1 ether);
+        user2.doStake(1 ether);
+
+        hevm.warp(now + 2.5 days);
+
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1 days);
+
+        user3.doApprove(address(lpToken), address(pool), 1 ether);
+        user3.doStake(1 ether);
+
+        hevm.warp(now + 4 days);
+        user1.doWithdraw(1 ether);
+        user2.doWithdraw(1 ether);
+        user3.doWithdraw(1 ether);
+
+        assertEq(pool.totalSupply(), 0);
+        assertEq(pool.balanceOf(address(user3)), 0);
+        assertEq(pool.balanceOf(address(user2)), 0);
+        assertEq(pool.balanceOf(address(user1)), 0);
+
+        assertEq(lpToken.balanceOf(address(pool)), 0);
+        assertEq(lpToken.balanceOf(address(user3)), initialBalance);
+        assertEq(lpToken.balanceOf(address(user2)), initialBalance);
+        assertEq(lpToken.balanceOf(address(user1)), initialBalance);
     }
 
     function testFailWithdrawMoreThanBalance() public {
@@ -451,9 +531,12 @@ contract RollingDistributionIncentivesTest is DSTest {
 
     function testRewardCalculation5() public { // one flash staker
         lpToken.mint(address(user1), 100000 ether);
+
         pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
         assertEq(pool.rewardPerToken(1), 0);
         assertEq(pool.earned(address(user1), 1), 0);
+
+        hevm.warp(now + 1);
 
         user1.doApprove(address(lpToken), address(pool), 100000 ether);
         user1.doStake(100000 ether);
@@ -496,12 +579,14 @@ contract RollingDistributionIncentivesTest is DSTest {
 
         pool.newCampaign(36 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
 
+        hevm.warp(now + 1);
+
         user1.doApprove(address(lpToken), address(pool), 1 ether);
         user1.doStake(1 ether);
         user2.doApprove(address(lpToken), address(pool), 3 ether);
         user2.doStake(3 ether);
 
-        hevm.warp(now + (7 days) + 1);
+        hevm.warp(now + (7 days));
 
         user3.doApprove(address(lpToken), address(pool), 8 ether);
         user3.doStake(8 ether);
@@ -539,12 +624,15 @@ contract RollingDistributionIncentivesTest is DSTest {
    function testGetReward2() public {
         user1.doApprove(address(lpToken), address(pool), 1 ether);
         pool.modifyParameters("maxCampaigns", 100);
-        user1.doStake(1 ether);
+
         uint totalCampaigns = 80;
         for (uint i = 1; i <= totalCampaigns; i++) {
             pool.newCampaign(1 ether, i * 1 weeks + block.timestamp, 5 days, rewardDelay, instantExitPercentage);
             // hevm.warp(now + 2 weeks);
         }
+
+        hevm.warp(1 weeks + block.timestamp);
+        user1.doStake(1 ether);
         hevm.warp(now + 84 weeks);
 
         // check reward amount for user1, fully vested
@@ -560,6 +648,8 @@ contract RollingDistributionIncentivesTest is DSTest {
 
     function testGetLockedReward() public {
         pool.newCampaign(30 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
+
+        hevm.warp(now + 1);
 
         user1.doApprove(address(lpToken), address(pool), 1 ether);
         user1.doStake(1 ether);
@@ -628,6 +718,7 @@ contract RollingDistributionIncentivesTest is DSTest {
     function testGetLockedReward2() public {
         // testing get locked rewards with smallest interval possible (one block, around 15secs)
         pool.newCampaign(1000 ether, now + 1, 21 days, 16 weeks, instantExitPercentage);
+        hevm.warp(now + 1);
 
         user1.doApprove(address(lpToken), address(pool), 1 ether);
         user1.doStake(1 ether);
@@ -690,10 +781,12 @@ contract RollingDistributionIncentivesTest is DSTest {
     function testExit() public {
         pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
 
+        hevm.warp(now + 1);
+
         user1.doApprove(address(lpToken), address(pool), 1 ether);
         user1.doStake(1 ether);
 
-        hevm.warp(now + 21 days + 1);
+        hevm.warp(now + 21 days);
 
         uint instantReward = (10 ether * instantExitPercentage) / 1000;
         uint amountLocked = 10 ether - instantReward;
@@ -709,6 +802,7 @@ contract RollingDistributionIncentivesTest is DSTest {
 
     function testExitMidVesting() public {
         pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1);
 
         user1.doApprove(address(lpToken), address(pool), 1 ether);
         user1.doStake(1 ether);
@@ -730,6 +824,8 @@ contract RollingDistributionIncentivesTest is DSTest {
 
     function testExitAfterVesting() public {
         pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
+
+        hevm.warp(now + 1);
 
         user1.doApprove(address(lpToken), address(pool), 1 ether);
         user1.doStake(1 ether);
@@ -868,8 +964,59 @@ contract RollingDistributionIncentivesTest is DSTest {
 
     function testFailCancelCampaignAlreadyStarted() public {
         pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
-        hevm.warp(now+1);
+        hevm.warp(now + 1);
         pool.cancelCampaign(1);
+    }
+
+    function testCancelCampaignRecreateStakeWithdraw() public {
+        pool.newCampaign(10 ether, now + 1 days, 21 days, rewardDelay, instantExitPercentage);
+
+        hevm.warp(now + 1);
+        pool.cancelCampaign(1);
+
+        pool.newCampaign(10 ether, now + 1 days, 21 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 11 days);
+
+        assertEq(pool.campaignListLength(), 1);
+        assertEq(pool.lastCampaign(), 2);
+        assertEq(pool.firstCampaign(), 2);
+
+        user1.doApprove(address(lpToken), address(pool), 1 ether);
+        user1.doStake(1 ether);
+        user2.doApprove(address(lpToken), address(pool), 1 ether);
+        user2.doStake(1 ether);
+
+        hevm.warp(now + 9 days);
+        user3.doApprove(address(lpToken), address(pool), 1 ether);
+        user3.doStake(1 ether);
+
+        hevm.warp(now + 1 days);
+        user1.doWithdraw(0.5 ether);
+        user2.doWithdraw(0.5 ether);
+        user3.doWithdraw(0.5 ether);
+
+        assertEq(pool.balanceOf(address(user3)), 0.5 ether);
+        assertEq(pool.balanceOf(address(user2)), 0.5 ether);
+        assertEq(pool.balanceOf(address(user1)), 0.5 ether);
+
+        assertEq(lpToken.balanceOf(address(pool)), 1.5 ether);
+        assertEq(lpToken.balanceOf(address(user3)), initialBalance - 0.5 ether);
+        assertEq(lpToken.balanceOf(address(user2)), initialBalance - 0.5 ether);
+        assertEq(lpToken.balanceOf(address(user1)), initialBalance - 0.5 ether);
+
+        hevm.warp(now + 1 days);
+        user1.doWithdraw(0.5 ether);
+        user2.doWithdraw(0.5 ether);
+        user3.doWithdraw(0.5 ether);
+
+        assertEq(pool.balanceOf(address(user3)), 0);
+        assertEq(pool.balanceOf(address(user2)), 0);
+        assertEq(pool.balanceOf(address(user1)), 0);
+
+        assertEq(lpToken.balanceOf(address(pool)), 0);
+        assertEq(lpToken.balanceOf(address(user3)), initialBalance);
+        assertEq(lpToken.balanceOf(address(user2)), initialBalance);
+        assertEq(lpToken.balanceOf(address(user1)), initialBalance);
     }
 
     function testUpdateRewardBounds() public {
@@ -877,11 +1024,14 @@ contract RollingDistributionIncentivesTest is DSTest {
         pool.modifyParameters("maxCampaigns", 100);
 
         user1.doApprove(address(lpToken), address(pool), 1 ether);
-        user1.doStake(1 ether);
+
         uint totalCampaigns = 100;
         for (uint i = 1; i <= totalCampaigns; i++) {
             pool.newCampaign(1 ether, i * 1 weeks + block.timestamp, 5 days, rewardDelay, instantExitPercentage);
         }
+
+        hevm.warp(1 weeks + block.timestamp);
+        user1.doStake(1 ether);
         hevm.warp(now + 80 weeks);
 
         user2.doApprove(address(lpToken), address(pool), 1 ether);
@@ -929,7 +1079,7 @@ contract RollingDistributionIncentivesTest is DSTest {
         hevm.warp(now + 10 weeks);
 
         user2.doApprove(address(lpToken), address(pool), 1 ether);
-        user2.doStake(1 ether); 
+        user2.doStake(1 ether);
 
         hevm.warp(now + 10 weeks);
 
@@ -957,16 +1107,19 @@ contract RollingDistributionIncentivesTest is DSTest {
         assertEq(pool.contractEnabled(), 0);
 
         user2.doApprove(address(lpToken), address(pool), 1 ether);
-        user2.doStake(1 ether); 
+        user2.doStake(1 ether);
     }
 
     function testWithdrawFromDisabledContract() public {
-        user2.doApprove(address(lpToken), address(pool), 1 ether);
-        user2.doStake(1 ether); 
         pool.newCampaign(1 ether, 1 weeks + block.timestamp, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(1 weeks + block.timestamp);
+
+        user2.doApprove(address(lpToken), address(pool), 1 ether);
+        user2.doStake(1 ether);
+
         pool.disableContract();
         assertEq(pool.contractEnabled(), 0);
 
-        user2.doWithdraw(1 ether); 
+        user2.doWithdraw(1 ether);
     }
 }
