@@ -290,13 +290,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         require(contractEnabled == 1, "RollingDistributionIncentives/contract-disabled");
         require(amount > 0, "RollingDistributionIncentives/cannot-stake-zero");
         require(owner != address(0), "RollingDistributionIncentives/invalid-owner");
-        require(
-          both(
-            both(firstCampaign > 0, campaigns[firstCampaign].startTime <= now),
-            campaigns[firstCampaign].startTime > 0
-          ),
-          "RollingDistributionIncentives/no-campaign-ongoing"
-        );
+        require(currentCampaign() > 0, "RollingDistributionIncentives/campaigns-never-started");
 
         super.stake(amount, owner);
         emit Staked(owner, amount);
@@ -432,7 +426,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         }
         else if (campaignList.range() > maxCampaigns) {
             uint256 campaignToDelete = firstCampaign;
-            (,firstCampaign)      = campaignList.next(firstCampaign);
+            (,firstCampaign) = campaignList.next(firstCampaign);
             campaignList.del(campaignToDelete);
         }
 

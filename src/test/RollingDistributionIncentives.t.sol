@@ -58,6 +58,10 @@ contract Farmer {
     function doNewCampaign(uint256 reward, uint256 startTime, uint256 duration) public {
         pool.newCampaign(reward, startTime, reward, 0, 1000);
     }
+
+    function doTransfer(address token, address receiver, uint256 amount) public {
+        DSToken(token).transfer(receiver, amount);
+    }
 }
 
 contract RollingDistributionIncentivesTest is DSTest {
@@ -247,13 +251,92 @@ contract RollingDistributionIncentivesTest is DSTest {
     }
 
     function testFailStakeLowerApproval() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1);
+
         user1.doApprove(address(lpToken), address(pool), 0.9 ether);
         user1.doStake(1 ether);
     }
 
     function testFailStakeZero() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1);
+
         user1.doApprove(address(lpToken), address(pool), 1 ether);
         user1.doStake(0);
+    }
+
+    function testTransferLPTokensBeforeCampaignThenStake() public {
+        user1.doTransfer(address(lpToken), address(pool), 1);
+        assertEq(lpToken.balanceOf(address(pool)), 1);
+
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1);
+
+        user1.doApprove(address(lpToken), address(pool), 0.5 ether);
+        user1.doStake(0.5 ether);
+
+        user2.doApprove(address(lpToken), address(pool), 1 ether);
+        user2.doStake(1 ether);
+
+        assertEq(pool.totalSupply(), 1.5 ether);
+        assertEq(pool.balanceOf(address(user1)), 0.5 ether);
+        assertEq(pool.balanceOf(address(user2)), 1 ether);
+        assertEq(lpToken.balanceOf(address(pool)), 1.5 ether + 1);
+    }
+
+    function testTransferLPTokensAfterCampaignThenStake() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1);
+
+        user1.doApprove(address(lpToken), address(pool), 0.5 ether);
+        user1.doStake(0.5 ether);
+
+        user1.doTransfer(address(lpToken), address(pool), 1);
+        assertEq(lpToken.balanceOf(address(pool)), 0.5 ether + 1);
+
+        user2.doApprove(address(lpToken), address(pool), 1 ether);
+        user2.doStake(1 ether);
+
+        assertEq(pool.totalSupply(), 1.5 ether);
+        assertEq(pool.balanceOf(address(user1)), 0.5 ether);
+        assertEq(pool.balanceOf(address(user2)), 1 ether);
+        assertEq(lpToken.balanceOf(address(pool)), 1.5 ether + 1);
+    }
+
+    function testFailStakeInSecondCampaignBeforeStart() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1);
+
+        user1.doApprove(address(lpToken), address(pool), 0.5 ether);
+        user1.doStake(0.5 ether);
+
+        hevm.warp(now + 5 days);
+        user1.doWithdraw(0.5 ether);
+
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1);
+
+        assertEq(pool.firstCampaign(), 2);
+
+        user1.doApprove(address(lpToken), address(pool), 0.5 ether);
+        user1.doStake(0.5 ether);
+    }
+
+    function testStakeInSecondCampaignAfterStart() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1);
+
+        user1.doApprove(address(lpToken), address(pool), 0.5 ether);
+        user1.doStake(0.5 ether);
+
+        hevm.warp(now + 5 days);
+        user1.doWithdraw(0.5 ether);
+
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+
+        user1.doApprove(address(lpToken), address(pool), 0.5 ether);
+        user1.doStake(0.5 ether);
     }
 
     // withdraw
@@ -344,6 +427,9 @@ contract RollingDistributionIncentivesTest is DSTest {
     }
 
     function testFailWithdrawMoreThanBalance() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1);
+
         user1.doApprove(address(lpToken), address(pool), 1 ether);
         user1.doStake(1 ether);
 
@@ -351,10 +437,36 @@ contract RollingDistributionIncentivesTest is DSTest {
     }
 
     function testFailWithdrawZero() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1);
+
         user1.doApprove(address(lpToken), address(pool), 1 ether);
         user1.doStake(1 ether);
 
         user1.doWithdraw(0);
+    }
+
+    function testTransferLPTokensBeforeCampaignThenWithdraw() public {
+        user1.doTransfer(address(lpToken), address(pool), 1);
+        assertEq(lpToken.balanceOf(address(pool)), 1);
+
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+        hevm.warp(now + 1);
+
+        user1.doApprove(address(lpToken), address(pool), 0.5 ether);
+        user1.doStake(0.5 ether);
+
+        user2.doApprove(address(lpToken), address(pool), 1 ether);
+        user2.doStake(1 ether);
+
+        hevm.warp(now + 4 days);
+        user1.doWithdraw(0.5 ether);
+        user2.doWithdraw(1 ether);
+
+        assertEq(pool.totalSupply(), 0);
+        assertEq(pool.balanceOf(address(user1)), 0);
+        assertEq(pool.balanceOf(address(user2)), 0);
+        assertEq(lpToken.balanceOf(address(pool)), 1);
     }
 
     // testing reward calculation
@@ -371,6 +483,7 @@ contract RollingDistributionIncentivesTest is DSTest {
     function testRewardCalculation0() public { // one staker, one distribution
         pool.newCampaign(10 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
         hevm.warp(now+1);
+
         assertEq(pool.rewardPerToken(1), 0);
         assertEq(pool.earned(address(user1), 1), 0);
         assertEq(pool.earned(address(user2), 1), 0);
@@ -648,7 +761,6 @@ contract RollingDistributionIncentivesTest is DSTest {
 
     function testGetLockedReward() public {
         pool.newCampaign(30 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
-
         hevm.warp(now + 1);
 
         user1.doApprove(address(lpToken), address(pool), 1 ether);
