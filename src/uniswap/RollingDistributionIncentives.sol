@@ -69,7 +69,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     uint256 constant public HUNDRED               = 100;
     uint256 constant public THOUSAND              = 1000;
     uint256 constant public MILLION               = 1000000;
-    uint256 constant public DEFAULT_MAX_CAMPAIGNS = 15;
+    uint256 constant public DEFAULT_MAX_CAMPAIGNS = 16;
     uint256 constant public WAD                   = 1e18;
 
     // --- Structs ---
@@ -155,6 +155,12 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         rewardToken     = IERC20(rewardToken_);
         maxCampaigns    = DEFAULT_MAX_CAMPAIGNS;
         contractEnabled = 1;
+        emit ModifyParameters("maxCampaigns", DEFAULT_MAX_CAMPAIGNS);
+    }
+
+    // --- Boolean Logic ---
+    function both(bool x, bool y) internal pure returns (bool z) {
+        assembly{ z := and(x, y)}
     }
 
     // --- Administration ---
@@ -284,6 +290,8 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         require(contractEnabled == 1, "RollingDistributionIncentives/contract-disabled");
         require(amount > 0, "RollingDistributionIncentives/cannot-stake-zero");
         require(owner != address(0), "RollingDistributionIncentives/invalid-owner");
+        require(currentCampaign() > 0, "RollingDistributionIncentives/campaigns-never-started");
+
         super.stake(amount, owner);
         emit Staked(owner, amount);
     }
@@ -418,7 +426,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         }
         else if (campaignList.range() > maxCampaigns) {
             uint256 campaignToDelete = firstCampaign;
-            (,firstCampaign)      = campaignList.next(firstCampaign);
+            (,firstCampaign) = campaignList.next(firstCampaign);
             campaignList.del(campaignToDelete);
         }
 
