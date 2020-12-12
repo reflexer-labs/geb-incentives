@@ -116,12 +116,12 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     }
 
     /// @notice Modifier helper, calculates rewards
-    /// @dev Will recursively iterate campaigns, updating campaign data and user data (within a campaign) when needed.
-    /// @dev It is bounded by the number of campaigns that need update (and will only update campaign or user data as necessary).
-    /// @dev Users are their own keepers, so frequent users will not incur in high costs (the longer the user is inactive, the higher the gas cost).
+    /// @dev Will recursively iterate through campaigns, updating campaign data and user data (within a campaign) when needed.
+    /// @dev It is bounded by the number of campaigns that need to be updated (and will only update campaign or user data as necessary).
+    /// @dev Users are their own "keepers". If users interact with this contract frequently, the won't incur high costs (the longer the user is inactive, the higher the gas cost).
     /// @dev Ultimately bounded by maxCampaigns.
     /// @param account User address
-    /// @param campaignId campaign id
+    /// @param campaignId Campaign id
     function _updateRewards(address account, uint256 campaignId) internal {
         if (campaignId == 0) return;
         Campaign storage campaign = campaigns[campaignId];
@@ -222,7 +222,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         emit ModifyParameters(parameter, val);
     }
 
-    /// @return The id of currently active campaign, zero if none are active
+    /// @return The id of the currently active campaign, zero if none are active
     function currentCampaign() public view returns (uint256) {
         if (lastCampaign == 0) return 0;
         uint256 campaignId = lastCampaign;
@@ -241,7 +241,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     }
 
     // --- Distribution Logic ---
-    /// @notice Returns last time distribution was active (now if currently active, startTime if in the future, finishtime if in the past)
+    /// @notice Returns the last time distribution was active (now if currently active, startTime if in the future, finishtime if in the past)
     /// @param campaignId Id of the campaign
     function lastTimeRewardApplicable(uint256 campaignId) public view returns (uint256) {
         return min(max(now, campaigns[campaignId].startTime), finish(campaignId));
@@ -249,7 +249,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
 
     /// @notice Rewards per token staked, should be called every time the supply of LP tokens change during a campaign
     /// @param campaignId Id of the campaign
-    /// @return returns rewards per token staked (amount of tokens paid per token staked during the entire duration 
+    /// @return returns rewards per token staked (amount of tokens paid per token staked during the entire duration
     ///             of the campaign or up to now if the campaign is active)
     function rewardPerToken(uint256 campaignId) public view returns (uint256) {
         require(campaignList.isNode(campaignId), "RollingDistributionIncentives/invalid-campaign");
@@ -267,7 +267,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     /// @notice Calculate earned tokens by a single account for a given campaign
     /// @param account Account of the staker
     /// @param campaignId Id of the campaign
-    /// @return balance earned up to now (or up to the finish of the campaign), minus rewards already claimed.
+    /// @return THe balance earned up to now (or up to the finish of the campaign), minus rewards already claimed.
     function earned(address account, uint256 campaignId) public view returns (uint256) {
         Campaign storage campaign = campaigns[campaignId];
         return add(
@@ -379,7 +379,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
 
     /// @notice Creates a new campaign
     /// @param reward Reward for campaign (the contract needs enough balance for the campaign to be created)
-    /// @param startTime Campaign startTime
+    /// @param startTime Campaign start time
     /// @param duration Campaign duration
     /// @param rewardDelay Vesting period for locked tokens
     /// @param instantExitPercentage Percentage to be paid immediately on getRewards (1000 == 100%)
@@ -411,8 +411,8 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
             reward,
             startTime,
             duration,
-            div(reward, duration),        // rewardRate
-            startTime,                      // lastUpdateTime
+            div(reward, duration),           // rewardRate
+            startTime,                       // lastUpdateTime
             0,                               // rewardPerTokenStored
             (instantExitPercentage == THOUSAND) ? 0 : rewardDelay,
             instantExitPercentage
