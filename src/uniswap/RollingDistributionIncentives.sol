@@ -116,10 +116,10 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     }
 
     /// @notice Modifier helper, calculates rewards
-    /// @dev Will recursively iterate through campaigns, updating campaign data and user data when needed
-    /// @dev It is bounded by the number of campaigns that need to be updated (and will only update campaigns or user data as necessary)
-    /// @dev Users are their own "keepers". Users who interact with the contract frequently will not incur in high costs (the longer the user is inactive, the higher the gas cost per update)
-    /// @dev Ultimately bounded by maxCampaigns
+    /// @dev Will recursively iterate through campaigns, updating campaign data and user data (within a campaign) when needed.
+    /// @dev It is bounded by the number of campaigns that need to be updated (and will only update campaign or user data as necessary).
+    /// @dev Users are their own "keepers". If users interact with this contract frequently, the won't incur high costs (the longer the user is inactive, the higher the gas cost).
+    /// @dev Ultimately bounded by maxCampaigns.
     /// @param account User address
     /// @param campaignId Campaign id
     function _updateRewards(address account, uint256 campaignId) internal {
@@ -139,12 +139,15 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
                 update = true;
         }
 
-        if (update) { // keeps on going backwards through the list until it finds a campaigns that is up to date
+        if (update) { // keep on going backwards through the list until it finds a campaigns that is up to date.
             (, uint256 prevCampaign) = campaignList.prev(campaignId);
             _updateRewards(account, prevCampaign);
         }
     }
 
+    /// @notice Constructor
+    /// @param lpToken_ Liquidity Provider token (tokens users will stake)
+    /// @param rewardToken_ Rewards token
     constructor(
         address lpToken_,
         address rewardToken_
@@ -164,10 +167,10 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     }
 
     // --- Administration ---
-    /// @notice Modify campaign parameters (only authed)
+    /// @notice Modify Campaign parameters (only authed)
     /// @param parameter Parameter to be changed
     /// @param campaignId Campaign in wich to set the parameter
-    /// @param val New parameter value
+    /// @param val new parameter value
     function modifyParameters(bytes32 parameter, uint256 campaignId, uint256 val) external isAuthorized {
         Campaign storage campaign = campaigns[campaignId];
 
@@ -202,9 +205,9 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         emit ModifyParameters(parameter, campaignId, val);
     }
 
-    /// @notice Modify campaign parameters
+    /// @notice Modify campaign parameters (only authed)
     /// @param parameter Parameter to be changed
-    /// @param val New parameter value
+    /// @param val new parameter value
     function modifyParameters(bytes32 parameter, uint256 val) external isAuthorized {
         if (parameter == "maxCampaigns") {
           maxCampaigns = val;
@@ -219,22 +222,17 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         emit ModifyParameters(parameter, val);
     }
 
-    /// @return The ID of the currently active campaign, zero if none are active
+    /// @return The id of the currently active campaign, zero if none are active
     function currentCampaign() public view returns (uint256) {
-        if (lastCampaign == 0) {
-          return 0;
+        if (lastCampaign == 0) return 0;
+        uint256 campaignId = lastCampaign;
+        while (campaignId >= firstCampaign) {
+            if (campaigns[campaignId].startTime <= now && finish(campaignId) >= now) return campaignId;
+            (, campaignId) = campaignList.prev(campaignId);
         }
-        return _getCurrentCampaign(lastCampaign);
     }
 
-    /// @return The id of the current running campaign
-    function _getCurrentCampaign(uint256 campaignId) internal view returns (uint256) {
-        if (campaigns[campaignId].startTime <= now) return campaignId;
-        (, uint256 prevCampaign) = campaignList.prev(campaignId);
-        return (_getCurrentCampaign(prevCampaign));
-    }
-
-    /// @notice Withdraws tokens not locked for rewards and send them to the caller (authorized)
+    /// @notice Transfers tokens not locked for rewards to caller (only Authority)
     function withdrawExtraRewardTokens() external isAuthorized {
         require(rewardToken.balanceOf(address(this)) > globalReward, "RollingDistributionIncentives/does-not-exceed-global-reward");
         uint256 amountToWithdraw = sub(rewardToken.balanceOf(address(this)), globalReward);
@@ -243,15 +241,16 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     }
 
     // --- Distribution Logic ---
-    /// @notice Returns the last timestamp when distribution was active (returns 'now' if currently active, startTime if in the future)
-    /// @param campaignId Id of the campaign when the distribution is or will be active
+    /// @notice Returns the last time distribution was active (now if currently active, startTime if in the future, finishtime if in the past)
+    /// @param campaignId Id of the campaign
     function lastTimeRewardApplicable(uint256 campaignId) public view returns (uint256) {
         return min(max(now, campaigns[campaignId].startTime), finish(campaignId));
     }
 
-    /// @notice Computes and returns the amount of rewards per token staked
+    /// @notice Rewards per token staked, should be called every time the supply of LP tokens change during a campaign
     /// @param campaignId Id of the campaign
-    /// @return The amount of rewards per token staked
+    /// @return returns rewards per token staked (amount of tokens paid per token staked during the entire duration
+    ///             of the campaign or up to now if the campaign is active)
     function rewardPerToken(uint256 campaignId) public view returns (uint256) {
         require(campaignList.isNode(campaignId), "RollingDistributionIncentives/invalid-campaign");
         Campaign storage campaign = campaigns[campaignId];
@@ -265,10 +264,10 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
           );
     }
 
-    /// @notice Calculate earned tokens up to now for a specific account
-    /// @param account Staker account
+    /// @notice Calculate earned tokens by a single account for a given campaign
+    /// @param account Account of the staker
     /// @param campaignId Id of the campaign
-    /// @return Balance earned up to now
+    /// @return THe balance earned up to now (or up to the finish of the campaign), minus rewards already claimed.
     function earned(address account, uint256 campaignId) public view returns (uint256) {
         Campaign storage campaign = campaigns[campaignId];
         return add(
@@ -283,14 +282,14 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         stake(amount, msg.sender);
     }
 
-    /// @notice Used for staking on the contract on behalf of another address (previous ERC20 approval required)
+    /// @notice Used for staking on the contract for another address (previous ERC20 approval required)
     /// @param amount Amount to be staked
     /// @param owner Account that will own both the rewards and liquidity
     function stake(uint256 amount, address owner) override public updateReward(owner) nonReentrant {
         require(contractEnabled == 1, "RollingDistributionIncentives/contract-disabled");
         require(amount > 0, "RollingDistributionIncentives/cannot-stake-zero");
         require(owner != address(0), "RollingDistributionIncentives/invalid-owner");
-        require(currentCampaign() > 0, "RollingDistributionIncentives/campaigns-never-started");
+        require(currentCampaign() > 0, "RollingDistributionIncentives/campaigns-not-active");
 
         super.stake(amount, owner);
         emit Staked(owner, amount);
@@ -304,11 +303,11 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         emit Withdrawn(msg.sender, amount);
     }
 
-    /// @notice One tx exit taht withdraws the user's full balance and gets available rewards from current and/or last campaigns
+    /// @notice One tx exit that withdraws the user's full balance and gets available rewards from current or last campaign
     function exit() external {
         withdraw(balanceOf(msg.sender));
         uint256 currentCampaign_ = currentCampaign();
-        getReward((currentCampaign_ == 0) ? campaignCount : currentCampaign_);
+        getReward((currentCampaign_ == 0) ? lastCampaign : currentCampaign_);
     }
 
     /// @notice Withdraw rewards after locking period
@@ -347,7 +346,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         emit DelayedRewardPaid(account, campaignId, amountToExit);
     }
 
-    /// @notice Wthdraw rewards available, locking the remainder
+    /// @notice Wthdraw rewards available, (instant rewards will be transferred imediately, remainder is locked)
     /// @param campaignId Id of the campaign
     function getReward(uint256 campaignId) public updateCampaignReward(msg.sender, campaignId) nonReentrant {
         require(campaignList.isNode(campaignId), "RollingDistributionIncentives/invalid-campaign");
@@ -378,12 +377,12 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         }
     }
 
-    /// @notice Notify distribution amount
-    /// @param reward Reward for campaign (the contract needs enough reward tokens for the campaign to be created)
-    /// @param startTime Campaign startTime
+    /// @notice Creates a new campaign
+    /// @param reward Reward for campaign (the contract needs enough balance for the campaign to be created)
+    /// @param startTime Campaign start time
     /// @param duration Campaign duration
     /// @param rewardDelay Vesting period for locked tokens
-    /// @param instantExitPercentage Percentage to be paid immediately on calling getRewards (1000 == 100%)
+    /// @param instantExitPercentage Percentage to be paid immediately on getRewards (1000 == 100%)
     /// @return The id of the newly created campaign
     function newCampaign
     (
@@ -482,9 +481,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         return campaigns[campaignId].userRewardPerTokenPaid[owner];
     }
 
-    /**
-     * @notice Disable this contract
-     */
+    /// @notice Disable this contract
     function disableContract() external isAuthorized {
         contractEnabled = 0;
         emit DisableContract();

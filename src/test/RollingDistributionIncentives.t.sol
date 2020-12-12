@@ -266,6 +266,13 @@ contract RollingDistributionIncentivesTest is DSTest {
         user1.doStake(0);
     }
 
+    function testFailStakeBeforeCampaign() public {
+        pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+
+        user1.doApprove(address(lpToken), address(pool), 1 ether);
+        user1.doStake(0);
+    }
+
     function testTransferLPTokensBeforeCampaignThenStake() public {
         user1.doTransfer(address(lpToken), address(pool), 1);
         assertEq(lpToken.balanceOf(address(pool)), 1);
@@ -306,22 +313,24 @@ contract RollingDistributionIncentivesTest is DSTest {
 
     function testFailStakeInSecondCampaignBeforeStart() public {
         pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
+
         hevm.warp(now + 1);
 
         user1.doApprove(address(lpToken), address(pool), 0.5 ether);
         user1.doStake(0.5 ether);
 
-        hevm.warp(now + 5 days);
+        hevm.warp(now + 5 days + 1);
+        emit log_named_uint("currentCampaign 1 finished", pool.currentCampaign());
         user1.doWithdraw(0.5 ether);
 
         pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
-        hevm.warp(now + 1);
-
-        assertEq(pool.firstCampaign(), 2);
+        assertEq(pool.lastCampaign(), 2);
 
         user1.doApprove(address(lpToken), address(pool), 0.5 ether);
         user1.doStake(0.5 ether);
     }
+
+
 
     function testStakeInSecondCampaignAfterStart() public {
         pool.newCampaign(10 ether, now + 1, 5 days, rewardDelay, instantExitPercentage);
