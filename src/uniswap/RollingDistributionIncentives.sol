@@ -56,6 +56,8 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     uint256 public firstCampaign;
     // The latest scheduled campaign
     uint256 public lastCampaign;
+    // Flag (controlled by authed addresses) that indicates whether people can stake or not
+    uint256 public canStake;
     // Access flag, indicates whether this contract is still active
     uint256 public contractEnabled;
 
@@ -209,7 +211,10 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
     /// @param parameter Parameter to be changed
     /// @param val New parameter value
     function modifyParameters(bytes32 parameter, uint256 val) external isAuthorized {
-        if (parameter == "maxCampaigns") {
+        if (parameter == "canStake") {
+          canStake = val;
+        }
+        else if (parameter == "maxCampaigns") {
           maxCampaigns = val;
 
           while (campaignList.range() > maxCampaigns) {
@@ -289,7 +294,7 @@ contract RollingDistributionIncentives is LPTokenWrapper, Math, Auth, Reentrancy
         require(contractEnabled == 1, "RollingDistributionIncentives/contract-disabled");
         require(amount > 0, "RollingDistributionIncentives/cannot-stake-zero");
         require(owner != address(0), "RollingDistributionIncentives/invalid-owner");
-        require(currentCampaign() > 0, "RollingDistributionIncentives/campaigns-not-active");
+        require(canStake == 1, "RollingDistributionIncentives/staking-paused");
 
         super.stake(amount, owner);
         emit Staked(owner, amount);
