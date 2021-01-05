@@ -1,63 +1,6 @@
 pragma solidity ^0.6.7;
 
-// import "../../../lib/ds-token/src/token.sol"; // echidna will not recognize dapp tools style import
 import "../../uniswap/RollingDistributionIncentives.sol";
-
-// contract Farmer {
-//     RollingDistributionIncentives pool;
-
-//     constructor(RollingDistributionIncentives pool_) public {
-//         pool = pool_;
-//     }
-
-//     function doStake(uint amount) public {
-//         pool.stake(amount);
-//     }
-
-//     function doStakeFor(uint amount, address owner) public {
-//         pool.stake(amount, owner);
-//     }
-
-//     function doWithdraw(uint amount) public {
-//         pool.withdraw(amount);
-//     }
-
-//     function doExit() public {
-//         pool.exit();
-//     }
-
-//     function doGetLockedReward(address account, uint campaignId) public {
-//         pool.getLockedReward(account, campaignId);
-//     }
-
-//     function doGetReward(uint campaign) public {
-//         pool.getReward(campaign);
-//     }
-
-//     function doApprove(address token, address who, uint value) public {
-//         DSToken(token).approve(who, value);
-//     }
-
-//     function doModifyParameters(bytes32 parameter, uint256 campaignId, uint256 val) public {
-//         pool.modifyParameters(parameter, campaignId, val);
-//     }
-
-//     function doModifyParameters(bytes32 parameter, uint256 val) public {
-//         pool.modifyParameters(parameter, val);
-//     }
-
-//     function doWithdrawExtraRewardTokens() public {
-//         pool.withdrawExtraRewardTokens();
-//     }
-
-//     function doNewCampaign(uint256 reward, uint256 startTime, uint256 duration) public {
-//         pool.newCampaign(reward, startTime, reward, 0, 1000);
-//     }
-
-//     function doTransfer(address token, address receiver, uint256 amount) public {
-//         DSToken(token).transfer(receiver, amount);
-//     }
-// }
 
 // @notice Fuzz the whole thing, assess the results to see if failures make sense
 contract GeneralFuzz is RollingDistributionIncentives {
@@ -128,21 +71,22 @@ contract Farmer {
     }
 }
 
-// @notice Fuzz user interactions with the contract throuout 5 campaigns
+// @notice Fuzz user interactions with the contract throuout several campaigns
 contract ExecutionFuzz {
     MockToken lpToken;
     MockToken rewardToken;
     RollingDistributionIncentives pool;
     Farmer[] farmers;
-    uint userCount = 10;
-    uint campaignCount = 3;
+    uint userCount = 2;
+    uint campaignCount = 10;
     uint campaignValue = 1 ether;
-    uint maxTxValue = 100000 * 10 ** 18;
+    uint maxTxValue = 100000 ether;
 
     constructor() public {
         lpToken = new MockToken();
         rewardToken = new MockToken();
         pool = new RollingDistributionIncentives(address(lpToken), address(rewardToken));
+        pool.modifyParameters("canStake", 1);
 
         // creating users and setting up campaigns (1/week, 1 ether each, no vesting)
         for (uint i = 0; i < userCount; i++) {
@@ -150,31 +94,43 @@ contract ExecutionFuzz {
         }
 
         for (uint i = 0; i < campaignCount; i++) {
-            pool.newCampaign(1 ether, (i + 1) * 1 weeks + block.timestamp, 5 days, 1, 1000);
+            pool.newCampaign(1 ether, block.timestamp + 1 + (i * 1 weeks) , 6.5 days, 1, 1000);
         }
     }
 
+    // will stake a random amount within maxTxValue
     function stake(uint user, uint amount) public {
-        Farmer(farmers[user%userCount]).doStake(amount%maxTxValue);
+        farmers[user%userCount].doStake(amount%maxTxValue);
     }
+
+    // will withdraw a valid amount (less than user balance)
     function withdraw(uint user, uint amount) public {
         Farmer farmer = farmers[user%userCount];
         uint previousBalance = pool.balanceOf(address(farmer));
-        farmer.doWithdraw(amount%previousBalance);
 
-        assert(pool.balanceOf(address(farmer)) == previousBalance - (amount%previousBalance));
+        if (previousBalance == 0) {
+            farmer.doWithdraw(amount% maxTxValue); // will always gracefully revert
+        } else {
+            try farmer.doWithdraw(amount% previousBalance) {} catch {assert(false);} // will fail if withdraw reverts
+            assert(pool.balanceOf(address(farmer)) == previousBalance - amount%previousBalance); // asserts balances
+        }
     }
+
+    // gets rewards for a random campaign
     function getRewards(uint user, uint campaign) public {
-        Farmer(farmers[user%userCount]).doGetReward(campaign%campaignCount);
+        uint currentCampaign = pool.currentCampaign();
+        Farmer(farmers[user%userCount]).doGetReward(campaign%(currentCampaign == 0 ? campaignCount : currentCampaign));
     }
 
-    function echidna_test_totalSupply() public returns (bool) {
+    function echidna_test_pool_totalSupply() public returns (bool) {
         return (pool.totalSupply() == lpToken.received(address(pool)) - lpToken.sent(address(pool)));
     }
 
     function echidna_test_rewards() public returns (bool passed) {
-        return rewardToken.sent(address(pool)) < campaignCount * campaignValue;
+        uint currentCampaign = pool.currentCampaign();
+        if (currentCampaign == 0) {
+            return rewardToken.sent(address(pool)) < campaignCount * campaignValue;
+        }
     }
-
 }
     

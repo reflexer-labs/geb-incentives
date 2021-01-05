@@ -1,8 +1,8 @@
-# Fuzzing the PI
+# Security Tests
 
-The contracts in this folder are the fuzz scripts for the rolling distribution incentives contract.
+The contracts in this folder are the fuzz and symbolic execution scripts for the rolling distribution incentives contract.
 
-## Setup
+## Fuzz
 
 To run the fuzzer, set up Echidna (https://github.com/crytic/echidna) on your machine.
 
@@ -75,6 +75,25 @@ This script will setup x campaigns, and run through them fuzzing user interactio
 
 Set user and campaign amount to taste, this test is best run with a high seqLen (sequences of transactions). It will test for the totalSupply of incentives ownership, and also the boundaries for reward granting. It also asserts if a withdrawal (for available balance) suceeds.
 
+1. 10 users, 3 campaigns. Tested with a high seqLen of 500 (number of interactions per run).
+Analyzing contract: /Users/fabio/Documents/reflexer/geb-incentives/src/test/fuzz/RollingDistributionIncentivesFuzz.sol:ExecutionFuzz
+echidna_test_pool_totalSupply: passed! 🎉
+echidna_test_rewards: passed! 🎉
+assertion in withdraw: passed! 🎉
+assertion in stake: passed! 🎉
+assertion in getRewards: passed! 🎉
+
+2. 1 user, 12 campaigns. seqLen set to 5 to ensure trials span long periods of inactivity.
 
 
+## Symbolic execution
+The scripts are in SymbolicExecution.sol. 
+
+Run ```dapp test --fuzz-runs <number> prove_stake``` to run tests for staking.
+
+- prove_stake
+- prove_withdraw
+- prove_getRewards *** failing for over 84 campaigns with revert("invalid-campaign"), run with more than default runs to arrive at the error.
+
+All remaining tests with the exception of the mentioned above pass with a high number of runs.
 
