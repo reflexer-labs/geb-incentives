@@ -1,0 +1,10 @@
+seqLen: 500
+testLimit: 20000
+checkAsserts: true
+sender: ["0x10000", "0x20000", "0xabc00"]
+# filterFunctions: ["tlv", "adat", "dgt", "lut", "mrt", "adi", "uprad", "lprad", "pscl", "pdc", "hcd", "dos", "ips", "folb", "foub", "drr", "nb", "ag", "sg", "rt", "getNextRedemptionRate", "getGainAdjustedTerms", "getGainAdjustedPIOutput", "getNextPriceDeviationCumulative", "breaksNoiseBarrier", "getBoundedRedemptionRate", "riemannSum", "seedProposer", "allReaderToggle", "readers", "addAuthority", "removeReader", "authorities", "addReader", "removeAuthority"]
+coverage: true
+maxTimeDelay: 725760 # 1.2 weeks
+maxBlockDelay: 60480 # around 1 weeks of blocks
+testMaxGas: 12500000 # current block gas limit
+estimateGas: true
