@@ -85,6 +85,7 @@ contract SymbolicExecutionTest is DSTest {
         rewardToken = new MockToken();
         pool = new RollingDistributionIncentives(address(lpToken), address(rewardToken));
         pool.modifyParameters("canStake", 1);
+        pool.modifyParameters("maxCampaigns", 100);
 
         // creating users and setting up campaigns (1/week, 1 ether each, no vesting)
         for (uint i = 0; i < userCount; i++) {

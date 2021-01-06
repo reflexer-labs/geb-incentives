@@ -93,7 +93,7 @@ Run ```dapp test --fuzz-runs <number> prove_stake``` to run tests for staking.
 
 - prove_stake
 - prove_withdraw
-- prove_getRewards *** failing for over 84 campaigns with revert("invalid-campaign"), run with more than default runs to arrive at the error.
+- prove_getRewards 
 
 All remaining tests with the exception of the mentioned above pass with a high number of runs.
 
