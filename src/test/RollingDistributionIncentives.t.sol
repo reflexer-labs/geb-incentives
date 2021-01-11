@@ -792,6 +792,140 @@ contract RollingDistributionIncentivesTest is DSTest {
         assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), 3 ether));
     }
 
+   function testGetReward3() public {
+        user1.doApprove(address(lpToken), address(pool), 10 ether);
+        user2.doApprove(address(lpToken), address(pool), 10 ether);
+        user3.doApprove(address(lpToken), address(pool), 10 ether);
+        pool.modifyParameters("maxCampaigns", 100);
+
+        uint totalCampaigns = 80;
+        for (uint i = 1; i <= totalCampaigns; i++) {
+            pool.newCampaign(1 ether, i * 1 weeks + block.timestamp, 5 days, rewardDelay, instantExitPercentage);
+        }
+        hevm.warp(now + 1); // first campaign active
+
+        user2.doStake(1 ether);
+        user3.doStake(1 ether);
+
+        hevm.warp(now + 1 days); 
+        user2.doWithdraw(0.5 ether);
+        user3.doWithdraw(0.3 ether);
+
+        hevm.warp(now + 1 days); 
+        user2.doStake(0.1 ether);
+        user3.doStake(0.1 ether);
+
+        hevm.warp(now + 1 days); 
+        user2.doWithdraw(0.1 ether);
+        user3.doWithdraw(0.1 ether);
+
+        hevm.warp(now + 1 days); 
+        user2.doStake(0.5 ether);
+        user3.doStake(0.7 ether);
+
+        hevm.warp(now + 1 days); 
+        user2.doWithdraw(0.2 ether);
+        user3.doWithdraw(0.2 ether);        
+
+        hevm.warp(now + 1 days); 
+        user2.doStake(0.2 ether);
+        user3.doStake(0.2 ether);      
+
+        hevm.warp(now + 1 days); 
+        user2.doWithdraw(1 ether);
+        user3.doWithdraw(1.4 ether);    
+
+
+        hevm.warp(29 weeks + block.timestamp); 
+        user1.doStake(1 ether);
+        hevm.warp(30 weeks + block.timestamp); 
+
+        user1.doGetReward(30);
+        assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), 1 ether));
+
+        try user1.doGetReward(1) {} catch {}
+        assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), 1 ether));
+
+        try user1.doGetReward(29) {} catch {}
+        assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), 1 ether));
+
+        user1.doGetReward(31);
+        assertTrue(almostEqual(rewardToken.balanceOf(address(user1)), 2 ether));
+    }
+
+   function testGetReward4() public {
+        user1.doApprove(address(lpToken), address(pool), 100 ether);
+        user2.doApprove(address(lpToken), address(pool), 10 ether);
+        user3.doApprove(address(lpToken), address(pool), 10 ether);
+        pool.modifyParameters("maxCampaigns", 100);
+
+        uint totalCampaigns = 80;
+        for (uint i = 1; i <= totalCampaigns; i++) {
+            pool.newCampaign(1 ether, i * 1 weeks + block.timestamp, 5 days, 1, instantExitPercentage);
+        }
+        hevm.warp(now + 1); // first campaign active
+
+        user2.doStake(1 ether);
+        user3.doStake(1 ether);
+
+        hevm.warp(now + 1 days); 
+        user2.doWithdraw(0.5 ether);
+        user3.doWithdraw(0.3 ether);
+
+        hevm.warp(now + 1 days); 
+        user2.doStake(0.1 ether);
+        user3.doStake(0.1 ether);
+
+        hevm.warp(now + 1 days); 
+        user2.doWithdraw(0.1 ether);
+        user3.doWithdraw(0.1 ether);
+
+        hevm.warp(now + 1 days); 
+        user2.doStake(0.5 ether);
+        user3.doStake(0.7 ether);
+
+        hevm.warp(now + 1 days); 
+        user2.doWithdraw(0.2 ether);
+        user3.doWithdraw(0.2 ether);        
+
+        hevm.warp(now + 1 days); 
+        user2.doStake(0.2 ether);
+        user3.doStake(0.2 ether);      
+
+        hevm.warp(now + 1 days);    
+        user3.doWithdraw(0.4 ether); // all users remain with 1 eth staked
+
+        user2.doGetReward(1);
+        user3.doGetReward(1);
+        emit log_named_uint("campaign activity finished", pool.currentCampaign());
+
+        hevm.warp(7 days + block.timestamp); // no campaigns active
+        emit log_named_uint("campaign 2", pool.currentCampaign());
+        // user3.doGetReward(2);
+
+        hevm.warp(7 days + block.timestamp); // third campaign
+        user1.doStake(100 ether);
+
+        emit log_named_uint("campaign user 1 staking", pool.currentCampaign());
+        hevm.warp(block.timestamp + 600); 
+
+        user1.doGetReward(3);
+
+        emit log_named_uint("earned in 2", pool.earned(address(user1), 2));
+        emit log_named_uint("rewards in 2", pool.rewards(address(user1), 2));
+        uint campaign3rewards = rewardToken.balanceOf(address(user1)); // partial rewards
+        assertTrue(campaign3rewards > 0); // ongoing campaign
+
+        try user1.doGetReward(1) {} catch {} // no rewards, will fail
+        assertEq(rewardToken.balanceOf(address(user1)), campaign3rewards);
+
+        try user1.doGetReward(2) {} catch {} // next campaign, will fail
+        assertEq(rewardToken.balanceOf(address(user1)), campaign3rewards);
+
+        try user1.doGetReward(30) {} catch {} // far into the future, will fail
+        assertEq(rewardToken.balanceOf(address(user1)), campaign3rewards);
+    }
+
     function testGetLockedReward() public {
         pool.newCampaign(30 ether, now + 1, 21 days, rewardDelay, instantExitPercentage);
         hevm.warp(now + 1);
