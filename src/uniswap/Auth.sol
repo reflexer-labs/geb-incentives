@@ -16,7 +16,6 @@ contract Auth {
 
     constructor () public {
         authorizedAccounts[msg.sender] = 1;
-
         emit AddAuthorization(msg.sender);
     }
 }

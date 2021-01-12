@@ -19,8 +19,8 @@ contract StakingRewardsFactory is Auth, SafeMath {
         uint rewardAmount;
     }
 
-    // rewards info by staking token
-    mapping(uint256 => StakingRewardsInfo) public stakingRewardsInfoByStakingToken;
+    // rewards info by campaign number
+    mapping(uint256 => StakingRewardsInfo) public stakingRewardsInfo;
     // timestamp when the last campaign ends for a specific staking token
     mapping(address => uint256) public lastCampaignEndTime;
 
@@ -38,9 +38,10 @@ contract StakingRewardsFactory is Auth, SafeMath {
     // --- Administration ---
     function modifyParameters(uint256 campaign, bytes32 parameter, uint256 val) external isAuthorized {
         require(campaign < stakingTokens.length, "StakingRewardsFactory/inexistent-campaign");
-        require(val > 0, "StakingRewardsFactory/null-val");
 
-        StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[campaign];
+        StakingRewardsInfo storage info = stakingRewardsInfo[campaign];
+        require(info.stakingRewards != address(0), 'StakingRewardsFactory/not-deployed');
+
         if (parameter == "rewardAmount") {
             require(StakingRewards(info.stakingRewards).rewardRate() == 0, "StakingRewardsFactory/campaign-already-started");
             info.rewardAmount = val;
@@ -49,12 +50,17 @@ contract StakingRewardsFactory is Auth, SafeMath {
         emit ModifyParameters(campaign, parameter, val);
     }
 
-    ///// permissioned functions
+    // --- Utils ---
+    function transferTokenOut(address token, address receiver, uint256 amount) external isAuthorized {
+        require(address(receiver) != address(0), "StakingRewardsFactory/cannot-transfer-to-null");
+        require(IERC20(token).transfer(receiver, amount), "StakingRewardsFactory/could-not-transfer-token");
+    }
 
+    // --- Core Logic ---
     // deploy a staking reward contract for the staking token, and store the reward amount
     // the reward will be distributed to the staking reward contract no sooner than the genesis
     function deploy(address stakingToken, uint rewardAmount, uint duration) public isAuthorized {
-        StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[stakingTokens.length];
+        StakingRewardsInfo storage info = stakingRewardsInfo[stakingTokens.length];
 
         info.stakingRewards = address(new StakingRewards(/*_rewardsDistribution=*/ address(this), rewardsToken, stakingToken, duration));
         info.rewardAmount = rewardAmount;
@@ -66,8 +72,8 @@ contract StakingRewardsFactory is Auth, SafeMath {
     // notify reward amount for an individual staking token
     // this is a fallback in case the notifyRewardAmounts costs too much gas to call for all contracts
     function notifyRewardAmount(uint256 campaignNumber) public isAuthorized {
-        StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[campaignNumber];
-        require(info.stakingRewards != address(0), 'StakingRewardsFactory::notifyRewardAmount: not deployed');
+        StakingRewardsInfo storage info = stakingRewardsInfo[campaignNumber];
+        require(info.stakingRewards != address(0), 'StakingRewardsFactory/not-deployed');
 
         if (info.rewardAmount > 0) {
             uint rewardAmount = info.rewardAmount;
@@ -80,7 +86,7 @@ contract StakingRewardsFactory is Auth, SafeMath {
 
             require(
                 IERC20(rewardsToken).transfer(info.stakingRewards, rewardAmount),
-                'StakingRewardsFactory::notifyRewardAmount: transfer failed'
+                'StakingRewardsFactory/transfer-failed'
             );
             StakingRewards(info.stakingRewards).notifyRewardAmount(rewardAmount);
 
