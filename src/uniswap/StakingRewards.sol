@@ -75,7 +75,7 @@ contract StakingRewards is SafeERC20, Math, RewardsDistributionRecipient, Reentr
     /* ========== MUTATIVE FUNCTIONS ========== */
 
     function stakeWithPermit(uint256 amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external nonReentrant updateReward(msg.sender) {
-        require(amount > 0, "Cannot stake 0");
+        require(amount > 0, "StakingRewards/cannot-stake-0");
         _totalSupply = add(_totalSupply, amount);
         _balances[msg.sender] = add(_balances[msg.sender], amount);
 
@@ -87,7 +87,7 @@ contract StakingRewards is SafeERC20, Math, RewardsDistributionRecipient, Reentr
     }
 
     function stake(uint256 amount) external nonReentrant updateReward(msg.sender) {
-        require(amount > 0, "Cannot stake 0");
+        require(amount > 0, "StakingRewards/cannot-stake-0");
         _totalSupply = add(_totalSupply, amount);
         _balances[msg.sender] = add(_balances[msg.sender], amount);
         safeTransferFrom(stakingToken, msg.sender, address(this), amount);
@@ -95,7 +95,7 @@ contract StakingRewards is SafeERC20, Math, RewardsDistributionRecipient, Reentr
     }
 
     function withdraw(uint256 amount) public nonReentrant updateReward(msg.sender) {
-        require(amount > 0, "Cannot withdraw 0");
+        require(amount > 0, "StakingRewards/cannot-withdraw-0");
         _totalSupply = sub(_totalSupply, amount);
         _balances[msg.sender] = sub(_balances[msg.sender], amount);
         safeTransfer(stakingToken, msg.sender, amount);
@@ -132,7 +132,7 @@ contract StakingRewards is SafeERC20, Math, RewardsDistributionRecipient, Reentr
         // very high values of rewardRate in the earned and rewardsPerToken functions;
         // Reward + leftover must be less than 2^256 / 10^18 to avoid overflow.
         uint balance = rewardsToken.balanceOf(address(this));
-        require(rewardRate <= div(balance, rewardsDuration), "Provided reward too high");
+        require(rewardRate <= div(balance, rewardsDuration), "StakingRewards/provided-reward-too-high");
 
         lastUpdateTime = block.timestamp;
         periodFinish = add(block.timestamp, rewardsDuration);

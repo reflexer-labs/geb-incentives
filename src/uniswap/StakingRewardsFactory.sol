@@ -1,11 +1,12 @@
 pragma solidity 0.6.7;
 
 import '../zeppelin/ERC20/IERC20.sol';
+import '../zeppelin/math/SafeMath.sol';
 
 import "./Auth.sol";
 import './StakingRewards.sol';
 
-contract StakingRewardsFactory is Auth {
+contract StakingRewardsFactory is Auth, SafeMath {
     // immutables
     address public rewardsToken;
 
@@ -20,8 +21,11 @@ contract StakingRewardsFactory is Auth {
 
     // rewards info by staking token
     mapping(uint256 => StakingRewardsInfo) public stakingRewardsInfoByStakingToken;
+    // timestamp when the last campaign ends for a specific staking token
+    mapping(address => uint256) public lastCampaignEndTime;
 
     // --- Events ---
+    event ModifyParameters(uint256 indexed campaign, bytes32 parameter, uint256 val);
     event Deploy(address indexed stakingToken, uint256 indexed campaignNumber, uint256 rewardAmount, uint256 duration);
     event NotifyRewardAmount(uint256 indexed campaignNumber, uint256 rewardAmount);
 
@@ -29,6 +33,20 @@ contract StakingRewardsFactory is Auth {
         address _rewardsToken
     ) Auth() public {
         rewardsToken = _rewardsToken;
+    }
+
+    // --- Administration ---
+    function modifyParameters(uint256 campaign, bytes32 parameter, uint256 val) external isAuthorized {
+        require(campaign < stakingTokens.length, "StakingRewardsFactory/inexistent-campaign");
+        require(val > 0, "StakingRewardsFactory/null-val");
+
+        StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[campaign];
+        if (parameter == "rewardAmount") {
+            require(StakingRewards(info.stakingRewards).rewardRate() == 0, "StakingRewardsFactory/campaign-already-started");
+            info.rewardAmount = val;
+        }
+        else revert("StakingRewardsFactory/modify-unrecognized-params");
+        emit ModifyParameters(campaign, parameter, val);
     }
 
     ///// permissioned functions
@@ -45,15 +63,7 @@ contract StakingRewardsFactory is Auth {
         emit Deploy(stakingToken, stakingTokens.length - 1, rewardAmount, duration);
     }
 
-    // call notifyRewardAmount for all staking tokens.
-    function notifyRewardAmounts() external isAuthorized {
-        require(stakingTokens.length > 0, 'StakingRewardsFactory::notifyRewardAmounts: called before any deploys');
-        for (uint i = 0; i < stakingTokens.length; i++) {
-            notifyRewardAmount(i);
-        }
-    }
-
-    // notify reward amount for an individual staking token.
+    // notify reward amount for an individual staking token
     // this is a fallback in case the notifyRewardAmounts costs too much gas to call for all contracts
     function notifyRewardAmount(uint256 campaignNumber) public isAuthorized {
         StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[campaignNumber];
@@ -62,6 +72,11 @@ contract StakingRewardsFactory is Auth {
         if (info.rewardAmount > 0) {
             uint rewardAmount = info.rewardAmount;
             info.rewardAmount = 0;
+
+            uint256 campaignEndTime = add(block.timestamp, StakingRewards(info.stakingRewards).rewardsDuration());
+            if (lastCampaignEndTime[stakingTokens[campaignNumber]] < campaignEndTime) {
+              lastCampaignEndTime[stakingTokens[campaignNumber]] = campaignEndTime;
+            }
 
             require(
                 IERC20(rewardsToken).transfer(info.stakingRewards, rewardAmount),
