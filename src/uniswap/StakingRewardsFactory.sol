@@ -8,7 +8,6 @@ import './StakingRewards.sol';
 contract StakingRewardsFactory is Auth {
     // immutables
     address public rewardsToken;
-    uint    public stakingRewardsGenesis;
 
     // the staking tokens for which the rewards contract has been deployed
     address[] public stakingTokens;
@@ -20,51 +19,44 @@ contract StakingRewardsFactory is Auth {
     }
 
     // rewards info by staking token
-    mapping(address => StakingRewardsInfo) public stakingRewardsInfoByStakingToken;
+    mapping(uint256 => StakingRewardsInfo) public stakingRewardsInfoByStakingToken;
 
     // --- Events ---
-    event Deploy(address indexed stakingToken, uint256 position, uint256 rewardAmount, uint256 startTime);
-    event NotifyRewardAmount(address indexed stakingToken, uint256 rewardAmount);
+    event Deploy(address indexed stakingToken, uint256 indexed campaignNumber, uint256 rewardAmount, uint256 duration);
+    event NotifyRewardAmount(uint256 indexed campaignNumber, uint256 rewardAmount);
 
     constructor(
-        address _rewardsToken,
-        uint _stakingRewardsGenesis
+        address _rewardsToken
     ) Auth() public {
-        require(_stakingRewardsGenesis >= block.timestamp, 'StakingRewardsFactory/genesis too soon');
-
         rewardsToken = _rewardsToken;
-        stakingRewardsGenesis = _stakingRewardsGenesis;
     }
 
     ///// permissioned functions
 
     // deploy a staking reward contract for the staking token, and store the reward amount
     // the reward will be distributed to the staking reward contract no sooner than the genesis
-    function deploy(address stakingToken, uint rewardAmount, uint startTime) public isAuthorized {
-        StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[stakingToken];
-        require(info.stakingRewards == address(0), 'StakingRewardsFactory/already-deployed');
+    function deploy(address stakingToken, uint rewardAmount, uint duration) public isAuthorized {
+        StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[stakingTokens.length];
 
-        info.stakingRewards = address(new StakingRewards(/*_rewardsDistribution=*/ address(this), rewardsToken, stakingToken, startTime));
+        info.stakingRewards = address(new StakingRewards(/*_rewardsDistribution=*/ address(this), rewardsToken, stakingToken, duration));
         info.rewardAmount = rewardAmount;
         stakingTokens.push(stakingToken);
 
-        emit Deploy(stakingToken, stakingTokens.length - 1, rewardAmount, startTime);
+        emit Deploy(stakingToken, stakingTokens.length - 1, rewardAmount, duration);
     }
 
     // call notifyRewardAmount for all staking tokens.
     function notifyRewardAmounts() external isAuthorized {
         require(stakingTokens.length > 0, 'StakingRewardsFactory::notifyRewardAmounts: called before any deploys');
         for (uint i = 0; i < stakingTokens.length; i++) {
-            notifyRewardAmount(stakingTokens[i]);
+            notifyRewardAmount(i);
         }
     }
 
     // notify reward amount for an individual staking token.
     // this is a fallback in case the notifyRewardAmounts costs too much gas to call for all contracts
-    function notifyRewardAmount(address stakingToken) public isAuthorized {
-        require(block.timestamp >= stakingRewardsGenesis, 'StakingRewardsFactory::notifyRewardAmount: not ready');
-
-        StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[stakingToken];
+    function notifyRewardAmount(uint256 campaignNumber) public isAuthorized {
+        StakingRewardsInfo storage info = stakingRewardsInfoByStakingToken[campaignNumber];
         require(info.stakingRewards != address(0), 'StakingRewardsFactory::notifyRewardAmount: not deployed');
 
         if (info.rewardAmount > 0) {
@@ -77,7 +69,7 @@ contract StakingRewardsFactory is Auth {
             );
             StakingRewards(info.stakingRewards).notifyRewardAmount(rewardAmount);
 
-            emit NotifyRewardAmount(stakingToken, rewardAmount);
+            emit NotifyRewardAmount(campaignNumber, rewardAmount);
         }
     }
 }
