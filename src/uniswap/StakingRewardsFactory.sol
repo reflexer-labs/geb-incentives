@@ -4,7 +4,7 @@ import '../zeppelin/ERC20/IERC20.sol';
 import '../zeppelin/math/SafeMath.sol';
 
 import "./Auth.sol";
-import './MerkleStakingRewards.sol';
+import './MerkleProxyStakingRewards.sol';
 
 contract StakingRewardsFactory is Auth, SafeMath {
     // immutables
@@ -81,7 +81,7 @@ contract StakingRewardsFactory is Auth, SafeMath {
         StakingRewardsInfo storage info = stakingRewardsInfo[stakingTokens.length];
 
         info.stakingRewards = address(
-          new MerkleStakingRewards(/*_rewardsDistribution=*/ address(this), rewardsToken, stakingToken, registry, duration, merkleRoot)
+          new MerkleProxyStakingRewards(/*_rewardsDistribution=*/ address(this), rewardsToken, stakingToken, registry, duration, merkleRoot)
         );
         info.rewardAmount = rewardAmount;
         stakingTokens.push(stakingToken);
