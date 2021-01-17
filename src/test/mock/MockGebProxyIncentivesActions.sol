@@ -24,7 +24,7 @@ contract MockGebProxyIncentivesActions {
 
     /// @notice Stakes in Incentives Pool (geb-incentives)
     /// @param incentives address - Liquidity mining pool
-    function _stakeInMine(address incentives, uint256 index, uint256 merkleAmount, bytes32[] calldata merkleProof) internal {
+    function _stakeInMine(address incentives, uint256 index, uint256 merkleAmount, bytes32[] memory merkleProof) internal {
         DSTokenLike lpToken = DSTokenLike(MerkleGebIncentivesLike(incentives).stakingToken());
         lpToken.approve(incentives, uint(0 - 1));
         MerkleGebIncentivesLike(incentives).stake(index, lpToken.balanceOf(address(this)), merkleAmount, merkleProof);
