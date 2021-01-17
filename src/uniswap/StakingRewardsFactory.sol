@@ -4,7 +4,7 @@ import '../zeppelin/ERC20/IERC20.sol';
 import '../zeppelin/math/SafeMath.sol';
 
 import "./Auth.sol";
-import './StakingRewards.sol';
+import './MerkleStakingRewards.sol';
 
 contract StakingRewardsFactory is Auth, SafeMath {
     // immutables
@@ -26,7 +26,7 @@ contract StakingRewardsFactory is Auth, SafeMath {
 
     // --- Events ---
     event ModifyParameters(uint256 indexed campaign, bytes32 parameter, uint256 val);
-    event Deploy(address indexed stakingToken, uint256 indexed campaignNumber, uint256 rewardAmount, uint256 duration);
+    event Deploy(address indexed stakingToken, uint256 indexed campaignNumber, uint256 indexed isMerkleAuthed, uint256 rewardAmount, uint256 duration);
     event NotifyRewardAmount(uint256 indexed campaignNumber, uint256 rewardAmount);
 
     constructor(
@@ -57,7 +57,7 @@ contract StakingRewardsFactory is Auth, SafeMath {
     }
 
     // --- Core Logic ---
-    // deploy a staking reward contract for the staking token, and store the reward amount
+    // deploy a non merkle authed staking reward contract for the staking token, and store the reward amount
     // the reward will be distributed to the staking reward contract no sooner than the genesis
     function deploy(address stakingToken, uint rewardAmount, uint duration) public isAuthorized {
         StakingRewardsInfo storage info = stakingRewardsInfo[stakingTokens.length];
@@ -66,7 +66,27 @@ contract StakingRewardsFactory is Auth, SafeMath {
         info.rewardAmount = rewardAmount;
         stakingTokens.push(stakingToken);
 
-        emit Deploy(stakingToken, stakingTokens.length - 1, rewardAmount, duration);
+        emit Deploy(stakingToken, stakingTokens.length - 1, 0, rewardAmount, duration);
+    }
+
+    // deploy a merkle authed staking reward contract for the staking token, and store the reward amount
+    // the reward will be distributed to the staking reward contract no sooner than the genesis
+    function deployMerkleAuthed(
+        address stakingToken,
+        address registry,
+        uint rewardAmount,
+        uint duration,
+        bytes32 merkleRoot
+    ) public isAuthorized {
+        StakingRewardsInfo storage info = stakingRewardsInfo[stakingTokens.length];
+
+        info.stakingRewards = address(
+          new MerkleStakingRewards(/*_rewardsDistribution=*/ address(this), rewardsToken, stakingToken, registry, duration, merkleRoot)
+        );
+        info.rewardAmount = rewardAmount;
+        stakingTokens.push(stakingToken);
+
+        emit Deploy(stakingToken, stakingTokens.length - 1, 1, rewardAmount, duration);
     }
 
     // notify reward amount for an individual staking token

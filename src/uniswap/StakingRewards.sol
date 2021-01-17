@@ -17,11 +17,12 @@ contract StakingRewards is SafeERC20, Math, RewardsDistributionRecipient, Reentr
     uint256 public rewardsDuration;
     uint256 public lastUpdateTime;
     uint256 public rewardPerTokenStored;
+    uint256 public merkleAuth = 0;  // kept for backward compatibility with the merkle staking rewards
 
     mapping(address => uint256) public userRewardPerTokenPaid;
     mapping(address => uint256) public rewards;
 
-    uint256 private _totalSupply;
+    uint256                     private _totalSupply;
     mapping(address => uint256) private _balances;
 
     /* ========== CONSTRUCTOR ========== */
@@ -75,6 +76,7 @@ contract StakingRewards is SafeERC20, Math, RewardsDistributionRecipient, Reentr
     /* ========== MUTATIVE FUNCTIONS ========== */
 
     function stakeWithPermit(uint256 amount, uint deadline, uint8 v, bytes32 r, bytes32 s) external nonReentrant updateReward(msg.sender) {
+        require(merkleAuth == 0, "StakingRewards/is-merkle-auth");
         require(amount > 0, "StakingRewards/cannot-stake-0");
         _totalSupply = add(_totalSupply, amount);
         _balances[msg.sender] = add(_balances[msg.sender], amount);
@@ -87,6 +89,11 @@ contract StakingRewards is SafeERC20, Math, RewardsDistributionRecipient, Reentr
     }
 
     function stake(uint256 amount) external nonReentrant updateReward(msg.sender) {
+        require(merkleAuth == 0, "StakingRewards/is-merkle-auth");
+        _stake(amount);
+    }
+
+    function _stake(uint256 amount) internal {
         require(amount > 0, "StakingRewards/cannot-stake-0");
         _totalSupply = add(_totalSupply, amount);
         _balances[msg.sender] = add(_balances[msg.sender], amount);
@@ -94,7 +101,7 @@ contract StakingRewards is SafeERC20, Math, RewardsDistributionRecipient, Reentr
         emit Staked(msg.sender, amount);
     }
 
-    function withdraw(uint256 amount) public nonReentrant updateReward(msg.sender) {
+    function withdraw(uint256 amount) public virtual nonReentrant updateReward(msg.sender) {
         require(amount > 0, "StakingRewards/cannot-withdraw-0");
         _totalSupply = sub(_totalSupply, amount);
         _balances[msg.sender] = sub(_balances[msg.sender], amount);
