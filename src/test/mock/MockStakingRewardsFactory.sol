@@ -1,12 +1,12 @@
 pragma solidity 0.6.7;
 
-import '../zeppelin/ERC20/IERC20.sol';
-import '../zeppelin/math/SafeMath.sol';
+import '../../zeppelin/ERC20/IERC20.sol';
+import '../../zeppelin/math/SafeMath.sol';
 
-import "./Auth.sol";
-import './MerkleProxyStakingRewards.sol';
+import "../../uniswap/Auth.sol";
+import './MockMerkleProxyStakingRewards.sol';
 
-contract StakingRewardsFactory is Auth, SafeMath {
+contract MockStakingRewardsFactory is Auth, SafeMath {
     // immutables
     address public rewardsToken;
 
@@ -37,23 +37,23 @@ contract StakingRewardsFactory is Auth, SafeMath {
 
     // --- Administration ---
     function modifyParameters(uint256 campaign, bytes32 parameter, uint256 val) external isAuthorized {
-        require(campaign < stakingTokens.length, "StakingRewardsFactory/inexistent-campaign");
+        require(campaign < stakingTokens.length, "MockStakingRewardsFactory/inexistent-campaign");
 
         StakingRewardsInfo storage info = stakingRewardsInfo[campaign];
-        require(info.stakingRewards != address(0), 'StakingRewardsFactory/not-deployed');
+        require(info.stakingRewards != address(0), 'MockStakingRewardsFactory/not-deployed');
 
         if (parameter == "rewardAmount") {
-            require(StakingRewards(info.stakingRewards).rewardRate() == 0, "StakingRewardsFactory/campaign-already-started");
+            require(StakingRewards(info.stakingRewards).rewardRate() == 0, "MockStakingRewardsFactory/campaign-already-started");
             info.rewardAmount = val;
         }
-        else revert("StakingRewardsFactory/modify-unrecognized-params");
+        else revert("MockStakingRewardsFactory/modify-unrecognized-params");
         emit ModifyParameters(campaign, parameter, val);
     }
 
     // --- Utils ---
     function transferTokenOut(address token, address receiver, uint256 amount) external isAuthorized {
-        require(address(receiver) != address(0), "StakingRewardsFactory/cannot-transfer-to-null");
-        require(IERC20(token).transfer(receiver, amount), "StakingRewardsFactory/could-not-transfer-token");
+        require(address(receiver) != address(0), "MockStakingRewardsFactory/cannot-transfer-to-null");
+        require(IERC20(token).transfer(receiver, amount), "MockStakingRewardsFactory/could-not-transfer-token");
     }
 
     // --- Core Logic ---
@@ -81,7 +81,7 @@ contract StakingRewardsFactory is Auth, SafeMath {
         StakingRewardsInfo storage info = stakingRewardsInfo[stakingTokens.length];
 
         info.stakingRewards = address(
-          new MerkleProxyStakingRewards(/*_rewardsDistribution=*/ address(this), rewardsToken, stakingToken, registry, duration, merkleRoot)
+          new MockMerkleProxyStakingRewards(/*_rewardsDistribution=*/ address(this), rewardsToken, stakingToken, registry, duration, merkleRoot)
         );
         info.rewardAmount = rewardAmount;
         stakingTokens.push(stakingToken);
@@ -93,7 +93,7 @@ contract StakingRewardsFactory is Auth, SafeMath {
     // this is a fallback in case the notifyRewardAmounts costs too much gas to call for all contracts
     function notifyRewardAmount(uint256 campaignNumber) public isAuthorized {
         StakingRewardsInfo storage info = stakingRewardsInfo[campaignNumber];
-        require(info.stakingRewards != address(0), 'StakingRewardsFactory/not-deployed');
+        require(info.stakingRewards != address(0), 'MockStakingRewardsFactory/not-deployed');
 
         if (info.rewardAmount > 0) {
             uint rewardAmount = info.rewardAmount;
@@ -106,7 +106,7 @@ contract StakingRewardsFactory is Auth, SafeMath {
 
             require(
                 IERC20(rewardsToken).transfer(info.stakingRewards, rewardAmount),
-                'StakingRewardsFactory/transfer-failed'
+                'MockStakingRewardsFactory/transfer-failed'
             );
             StakingRewards(info.stakingRewards).notifyRewardAmount(rewardAmount);
 
