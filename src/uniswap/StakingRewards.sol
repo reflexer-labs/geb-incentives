@@ -21,7 +21,7 @@ contract StakingRewards is SafeERC20, Math, RewardsDistributionRecipient, Reentr
     mapping(address => uint256) public userRewardPerTokenPaid;
     mapping(address => uint256) public rewards;
 
-    uint256 private _totalSupply;
+    uint256                     private _totalSupply;
     mapping(address => uint256) private _balances;
 
     /* ========== CONSTRUCTOR ========== */
@@ -87,6 +87,11 @@ contract StakingRewards is SafeERC20, Math, RewardsDistributionRecipient, Reentr
     }
 
     function stake(uint256 amount) external nonReentrant updateReward(msg.sender) {
+        require(merkleAuth == 0, "StakingRewards/is-merkle-auth");
+        _stake(amount);
+    }
+
+    function _stake(uint256 amount) internal {
         require(amount > 0, "StakingRewards/cannot-stake-0");
         _totalSupply = add(_totalSupply, amount);
         _balances[msg.sender] = add(_balances[msg.sender], amount);
