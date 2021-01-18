@@ -3,6 +3,7 @@ pragma solidity 0.6.7;
 abstract contract MerkleGebIncentivesLike {
     function stakingToken() virtual public returns (address);
     function rewardsToken() virtual public returns (address);
+    function stake(uint256) virtual public;
     function stake(uint256, uint256, uint256, bytes32[] memory) virtual public;
     function withdraw(uint256) virtual public;
     function exit() virtual public;
@@ -22,7 +23,7 @@ abstract contract DSTokenLike {
 contract MockGebProxyIncentivesActions {
     // Internal functions
 
-    /// @notice Stakes in Incentives Pool (geb-incentives)
+    /// @notice Stakes in Merkle Authed Incentives Pool (geb-incentives)
     /// @param incentives address - Liquidity mining pool
     function _stakeInMine(address incentives, uint256 index, uint256 merkleAmount, bytes32[] memory merkleProof) internal {
         DSTokenLike lpToken = DSTokenLike(MerkleGebIncentivesLike(incentives).stakingToken());
@@ -30,14 +31,30 @@ contract MockGebProxyIncentivesActions {
         MerkleGebIncentivesLike(incentives).stake(index, lpToken.balanceOf(address(this)), merkleAmount, merkleProof);
     }
 
+    /// @notice Stakes in Incentives Pool (geb-incentives)
+    /// @param incentives address - Liquidity mining pool
+    function _stakeInMine(address incentives) internal {
+        DSTokenLike lpToken = DSTokenLike(MerkleGebIncentivesLike(incentives).stakingToken());
+        lpToken.approve(incentives, uint(0 - 1));
+        MerkleGebIncentivesLike(incentives).stake(lpToken.balanceOf(address(this)));
+    }
+
     // Public functions
+
+    /// @notice Stakes in merkle authed liquidity mining pool
+    /// @param incentives address - pool address
+    /// @param wad uint - amount
+    function stakeInMine(address incentives, uint256 wad, uint256 index, uint256 merkleAmount, bytes32[] calldata merkleProof) external {
+        DSTokenLike(MerkleGebIncentivesLike(incentives).stakingToken()).transferFrom(msg.sender, address(this), wad);
+        _stakeInMine(incentives, index, merkleAmount, merkleProof);
+    }
 
     /// @notice Stakes in liquidity mining pool
     /// @param incentives address - pool address
     /// @param wad uint - amount
-    function stakeInMine(address incentives, uint wad, uint256 index, uint256 merkleAmount, bytes32[] calldata merkleProof) external {
+    function stakeInMine(address incentives, uint256 wad) external {
         DSTokenLike(MerkleGebIncentivesLike(incentives).stakingToken()).transferFrom(msg.sender, address(this), wad);
-        _stakeInMine(incentives, index, merkleAmount, merkleProof);
+        _stakeInMine(incentives);
     }
 
     /// @notice Harvests rewards available (both instant and staked)

@@ -31,19 +31,23 @@ contract MerkleProxyStakingRewards is MerkleAuthorizer, StakingRewards {
         return _merkleUserBalances[user];
     }
 
+    function originalCaller(address caller) public view returns (address) {
+        address owner;
+        if (isContract(caller)) {
+          owner = Ownable(caller).owner();
+          require(registry.proxies(owner) == caller, "MerkleProxyStakingRewards/sender-not-owner-proxy");
+        } else {
+          owner = caller;
+        }
+        return owner;
+    }
+
     /* ========== MUTATIVE FUNCTIONS ========== */
 
     function stake(uint256 index, uint256 depositAmount, uint256 merkleAmount, bytes32[] calldata merkleProof)
       external nonReentrant updateReward(msg.sender) {
         require(merkleAuth == 1, "MerkleProxyStakingRewards/not-merkle-auth");
-        address owner;
-        if (isContract(msg.sender)) {
-          owner = Ownable(msg.sender).owner();
-          require(registry.proxies(owner) == msg.sender, "MerkleProxyStakingRewards/sender-not-owner-proxy");
-          require(!isContract(owner), "MerkleProxyStakingRewards/sender-owner-is-contract");
-        } else {
-          owner = msg.sender;
-        }
+        address owner = originalCaller(msg.sender);
         require(isMerkleAuthorized(index, owner, merkleAmount, merkleProof), "MerkleProxyStakingRewards/invalid-proof");
         uint256 newMerkleAccountBalance = add(_merkleUserBalances[owner], depositAmount);
         require(newMerkleAccountBalance <= merkleAmount, "MerkleProxyStakingRewards/exceeds-merkle-cap");
@@ -53,13 +57,7 @@ contract MerkleProxyStakingRewards is MerkleAuthorizer, StakingRewards {
 
     function withdraw(uint256 amount) public override {
         require(merkleAuth == 1, "MerkleProxyStakingRewards/not-merkle-auth");
-        address owner;
-        if (isContract(msg.sender)) {
-          owner = Ownable(msg.sender).owner();
-          require(registry.proxies(owner) == msg.sender, "MerkleProxyStakingRewards/sender-not-owner-proxy");
-        } else {
-          owner = msg.sender;
-        }
+        address owner = originalCaller(msg.sender);
         _merkleUserBalances[owner] = sub(_merkleUserBalances[owner], amount);
         super.withdraw(amount);
     }
