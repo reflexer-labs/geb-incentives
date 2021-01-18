@@ -48,28 +48,4 @@ contract Staker is ProxyCalls {
     function approveToken(address target, address token, uint amount) external {
         DSToken(token).approve(target, amount);
     }
-
-    /* function stakeInMine(address incentives, uint256 wad, uint256 index, uint256 merkleAmount, bytes32[] memory merkleProof) public {
-        userProxy.execute(proxyActions, msg.data);
-    }
-
-    function stakeInMine(address incentives, uint256 wad) public {
-        userProxy.execute(proxyActions, msg.data);
-    }
-
-    function getRewards(address pool) public {
-        userProxy.execute(proxyActions, abi.encodeWithSignature("getRewards(address)", pool));
-    }
-
-    function exitMine(address incentives) public {
-        userProxy.execute(proxyActions, msg.data);
-    }
-
-    function withdrawFromMine(address incentives, uint value) public {
-        userProxy.execute(proxyActions, msg.data);
-    }
-
-    function withdrawAndHarvest(address incentives, uint value) public {
-        userProxy.execute(proxyActions, msg.data);
-    } */
 }

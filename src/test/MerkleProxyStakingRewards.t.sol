@@ -302,6 +302,22 @@ contract MerkleProxyStakingRewardsTest is DSTest, ProxyCalls {
 
         alice.stakeInMine(address(stakingRewards), 0.5 ether);
     }
+    function testFail_toggle_merkleAuth_withdraw() public {
+        rewardToken.transfer(address(rewardsFactory), defaultReward);
+        rewardsFactory.notifyRewardAmount(0);
+        registry.build(address(this));
+
+        userProxy = registry.proxies(address(this));
+        stakingToken.approve(address(userProxy), uint(-1));
+
+        uint256 currentRewardTokenBalance  = rewardToken.balanceOf(address(this));
+        uint256 currentStakingTokenBalance = stakingToken.balanceOf(address(this));
+
+        this.stakeInMine(address(stakingRewards), 1 ether, 1, merkleAmount, merkleProof);
+        hevm.warp(now + defaultDuration / 2);
+        stakingRewards.toggleMerkleAuth();
+        this.withdrawFromMine(address(stakingRewards), 0.5 ether);
+    }
     function test_stake_both_transfer_ownership_get_rewards() public {
         alice = new Staker(address(proxyActions));
 
