@@ -57,8 +57,8 @@ contract StakingRewardsFactory is Auth, SafeMath {
     }
 
     // --- Core Logic ---
-    // deploy a staking reward contract for the staking token, and store the reward amount
-    // the reward will be distributed to the staking reward contract no sooner than the genesis
+    // @notify Deploy a staking reward contract for the staking token, and store the reward amount
+    // @dev The reward will be distributed to the staking reward contract no sooner than the genesis
     function deploy(address stakingToken, uint rewardAmount, uint duration) public isAuthorized {
         StakingRewardsInfo storage info = stakingRewardsInfo[stakingTokens.length];
 
@@ -69,8 +69,7 @@ contract StakingRewardsFactory is Auth, SafeMath {
         emit Deploy(stakingToken, stakingTokens.length - 1, rewardAmount, duration);
     }
 
-    // notify reward amount for an individual staking token
-    // this is a fallback in case the notifyRewardAmounts costs too much gas to call for all contracts
+    // @notify Reward amount for an individual staking token
     function notifyRewardAmount(uint256 campaignNumber) public isAuthorized {
         StakingRewardsInfo storage info = stakingRewardsInfo[campaignNumber];
         require(info.stakingRewards != address(0), 'StakingRewardsFactory/not-deployed');
