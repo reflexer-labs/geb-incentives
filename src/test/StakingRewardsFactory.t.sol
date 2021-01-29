@@ -164,24 +164,19 @@ contract StakingRewardsFactoryTest is DSTest {
         factory.notifyRewardAmount(0);
         factory.modifyParameters(0, "rewardAmount", 50E18);
     }
-    function test_notify_null_amount() public {
+    function testFail_deploy_null_amount() public {
         factory.deploy(address(stakingToken), 0, 1 hours);
-        rewardToken.transfer(address(factory), 100E18);
-        factory.notifyRewardAmount(0);
-
-        (address stakingContract, uint256 rewardAmount) = factory.stakingRewardsInfo(0);
-        assertEq(rewardToken.balanceOf(address(stakingContract)), 0);
     }
     function testFail_notify_not_enough_balance() public {
         factory.deploy(address(stakingToken), 100E18, 1 hours);
         factory.notifyRewardAmount(0);
     }
     function test_notify_multi() public {
-        factory.deploy(address(stakingToken), 100E18, 1 hours);
-        factory.deploy(address(stakingToken), 200E18, 6 hours);
-        factory.deploy(address(stakingToken), 300E18, 4 hours);
+        factory.deploy(address(stakingToken), 108E18, 1 hours);
+        factory.deploy(address(stakingToken), 216E18, 6 hours);
+        factory.deploy(address(stakingToken), 324E18, 4 hours);
 
-        rewardToken.transfer(address(factory), 600E18);
+        rewardToken.transfer(address(factory), 648E18);
 
         factory.notifyRewardAmount(0);
         factory.notifyRewardAmount(1);
@@ -190,16 +185,16 @@ contract StakingRewardsFactoryTest is DSTest {
         assertEq(rewardToken.balanceOf(address(factory)), 0);
 
         (address stakingContract, uint256 rewardAmount) = factory.stakingRewardsInfo(0);
-        assertEq(rewardToken.balanceOf(address(stakingContract)), 100E18);
+        assertEq(rewardToken.balanceOf(address(stakingContract)), 108E18);
 
         (stakingContract, rewardAmount) = factory.stakingRewardsInfo(1);
-        assertEq(rewardToken.balanceOf(address(stakingContract)), 200E18);
+        assertEq(rewardToken.balanceOf(address(stakingContract)), 216E18);
 
         (stakingContract, rewardAmount) = factory.stakingRewardsInfo(2);
-        assertEq(rewardToken.balanceOf(address(stakingContract)), 300E18);
+        assertEq(rewardToken.balanceOf(address(stakingContract)), 324E18);
     }
     function test_notify_after_campaign_ends() public {
-        factory.deploy(address(stakingToken), 100E18, 1 hours);
+        factory.deploy(address(stakingToken), 108E18, 1 hours);
         rewardToken.transfer(address(factory), 200E18);
         factory.notifyRewardAmount(0);
 
@@ -207,6 +202,6 @@ contract StakingRewardsFactoryTest is DSTest {
         factory.notifyRewardAmount(0);
 
         (address stakingContract, uint256 rewardAmount) = factory.stakingRewardsInfo(0);
-        assertEq(rewardToken.balanceOf(address(stakingContract)), 100E18);
+        assertEq(rewardToken.balanceOf(address(stakingContract)), 108E18);
     }
 }

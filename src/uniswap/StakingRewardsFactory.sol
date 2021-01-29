@@ -44,6 +44,7 @@ contract StakingRewardsFactory is Auth, SafeMath {
 
         if (parameter == "rewardAmount") {
             require(StakingRewards(info.stakingRewards).rewardRate() == 0, "StakingRewardsFactory/campaign-already-started");
+            require(val >= StakingRewards(info.stakingRewards).rewardsDuration(), "StakingRewardsFactory/reward-lower-than-duration");
             info.rewardAmount = val;
         }
         else revert("StakingRewardsFactory/modify-unrecognized-params");
@@ -60,6 +61,9 @@ contract StakingRewardsFactory is Auth, SafeMath {
     // @notify Deploy a staking reward contract for the staking token, and store the reward amount
     // @dev The reward will be distributed to the staking reward contract no sooner than the genesis
     function deploy(address stakingToken, uint rewardAmount, uint duration) public isAuthorized {
+        require(rewardAmount > 0, "StakingRewardsFactory/null-reward");
+        require(rewardAmount >= duration, "StakingRewardsFactory/reward-lower-than-duration");
+
         StakingRewardsInfo storage info = stakingRewardsInfo[stakingTokens.length];
 
         info.stakingRewards = address(new StakingRewards(/*_rewardsDistribution=*/ address(this), rewardsToken, stakingToken, duration));
@@ -76,7 +80,9 @@ contract StakingRewardsFactory is Auth, SafeMath {
 
         if (info.rewardAmount > 0) {
             uint rewardAmount = info.rewardAmount;
+            uint remainder    = rewardAmount % StakingRewards(info.stakingRewards).rewardsDuration();
             info.rewardAmount = 0;
+            rewardAmount      = sub(rewardAmount, remainder);
 
             uint256 campaignEndTime = add(block.timestamp, StakingRewards(info.stakingRewards).rewardsDuration());
             if (lastCampaignEndTime[stakingTokens[campaignNumber]] < campaignEndTime) {
