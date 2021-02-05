@@ -80,6 +80,13 @@ contract StakingRewardsFactoryTest is DSTest {
         }
         assertEq(factory.lastCampaignEndTime(address(stakingToken)), 0);
     }
+    function test_fetch_campaign_array_length() public {
+        factory.deploy(address(stakingToken), 100E18, 1 hours);
+        factory.deploy(address(stakingToken), 200E18, 6 hours);
+        factory.deploy(address(stakingToken), 300E18, 4 hours);
+
+        assertEq(factory.totalCampaignCount(), 3);
+    }
     function test_deploy_multi_campaign_multi_token() public {
         DSToken stakingToken2;
         stakingToken2 = new DSToken("STAKE", "STAKE");

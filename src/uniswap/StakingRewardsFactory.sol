@@ -52,6 +52,9 @@ contract StakingRewardsFactory is Auth, SafeMath {
     }
 
     // --- Utils ---
+    function totalCampaignCount() public view returns (uint256) {
+        return stakingTokens.length;
+    }
     function transferTokenOut(address token, address receiver, uint256 amount) external isAuthorized {
         require(address(receiver) != address(0), "StakingRewardsFactory/cannot-transfer-to-null");
         require(IERC20(token).transfer(receiver, amount), "StakingRewardsFactory/could-not-transfer-token");
