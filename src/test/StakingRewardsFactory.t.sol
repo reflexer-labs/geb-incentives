@@ -8,6 +8,248 @@ abstract contract Hevm {
     function warp(uint256) virtual public;
 }
 
+contract DSMath {
+    function add(uint x, uint y) internal pure returns (uint z) {
+        require((z = x + y) >= x, "ds-math-add-overflow");
+    }
+    function sub(uint x, uint y) internal pure returns (uint z) {
+        require((z = x - y) <= x, "ds-math-sub-underflow");
+    }
+    function mul(uint x, uint y) internal pure returns (uint z) {
+        require(y == 0 || (z = x * y) / y == x, "ds-math-mul-overflow");
+    }
+
+    function min(uint x, uint y) internal pure returns (uint z) {
+        return x <= y ? x : y;
+    }
+    function max(uint x, uint y) internal pure returns (uint z) {
+        return x >= y ? x : y;
+    }
+    function imin(int x, int y) internal pure returns (int z) {
+        return x <= y ? x : y;
+    }
+    function imax(int x, int y) internal pure returns (int z) {
+        return x >= y ? x : y;
+    }
+
+    uint constant WAD = 10 ** 18;
+    uint constant RAY = 10 ** 27;
+
+    //rounds to zero if x*y < WAD / 2
+    function wmul(uint x, uint y) internal pure returns (uint z) {
+        z = add(mul(x, y), WAD / 2) / WAD;
+    }
+    //rounds to zero if x*y < WAD / 2
+    function rmul(uint x, uint y) internal pure returns (uint z) {
+        z = add(mul(x, y), RAY / 2) / RAY;
+    }
+    //rounds to zero if x*y < WAD / 2
+    function wdiv(uint x, uint y) internal pure returns (uint z) {
+        z = add(mul(x, WAD), y / 2) / y;
+    }
+    //rounds to zero if x*y < RAY / 2
+    function rdiv(uint x, uint y) internal pure returns (uint z) {
+        z = add(mul(x, RAY), y / 2) / y;
+    }
+
+    // This famous algorithm is called "exponentiation by squaring"
+    // and calculates x^n with x as fixed-point and n as regular unsigned.
+    //
+    // It's O(log n), instead of O(n) for naive repeated multiplication.
+    //
+    // These facts are why it works:
+    //
+    //  If n is even, then x^n = (x^2)^(n/2).
+    //  If n is odd,  then x^n = x * x^(n-1),
+    //   and applying the equation for even x gives
+    //    x^n = x * (x^2)^((n-1) / 2).
+    //
+    //  Also, EVM division is flooring and
+    //    floor[(n-1) / 2] = floor[n / 2].
+    //
+    function rpow(uint x, uint n) internal pure returns (uint z) {
+        z = n % 2 != 0 ? x : RAY;
+
+        for (n /= 2; n != 0; n /= 2) {
+            x = rmul(x, x);
+
+            if (n % 2 != 0) {
+                z = rmul(z, x);
+            }
+        }
+    }
+}
+
+abstract contract ERC20Events {
+    event Approval(address indexed src, address indexed guy, uint wad);
+    event Transfer(address indexed src, address indexed dst, uint wad);
+}
+
+abstract contract ERC20 is ERC20Events {
+    function totalSupply() virtual public view returns (uint);
+    function balanceOf(address guy) virtual public view returns (uint);
+    function allowance(address src, address guy) virtual public view returns (uint);
+
+    function approve(address guy, uint wad) virtual public returns (bool);
+    function transfer(address dst, uint wad) virtual public returns (bool);
+    function transferFrom(
+        address src, address dst, uint wad
+    ) virtual public returns (bool);
+}
+
+
+contract DSNote {
+    event LogNote(
+        bytes4   indexed  sig,
+        address  indexed  guy,
+        bytes32  indexed  foo,
+        bytes32  indexed  bar,
+        uint256           wad,
+        bytes             fax
+    ) anonymous;
+
+    modifier note {
+        bytes32 foo;
+        bytes32 bar;
+        uint256 wad;
+
+        assembly {
+            foo := calldataload(4)
+            bar := calldataload(36)
+            wad := callvalue()
+        }
+
+        _;
+
+        emit LogNote(msg.sig, msg.sender, foo, bar, wad, msg.data);
+    }
+}
+
+interface DSAuthority {
+    function canCall(
+        address src, address dst, bytes4 sig
+    ) external view returns (bool);
+}
+
+abstract contract DSAuthEvents {
+    event LogSetAuthority (address indexed authority);
+    event LogSetOwner     (address indexed owner);
+}
+
+contract DSAuth is DSAuthEvents {
+    DSAuthority  public  authority;
+    address      public  owner;
+
+    constructor() public {
+        owner = msg.sender;
+        emit LogSetOwner(msg.sender);
+    }
+
+    function setOwner(address owner_)
+        virtual
+        public
+        auth
+    {
+        owner = owner_;
+        emit LogSetOwner(owner);
+    }
+
+    function setAuthority(DSAuthority authority_)
+        virtual
+        public
+        auth
+    {
+        authority = authority_;
+        emit LogSetAuthority(address(authority));
+    }
+
+    modifier auth {
+        require(isAuthorized(msg.sender, msg.sig), "ds-auth-unauthorized");
+        _;
+    }
+
+    function isAuthorized(address src, bytes4 sig) virtual internal view returns (bool) {
+        if (src == address(this)) {
+            return true;
+        } else if (src == owner) {
+            return true;
+        } else if (authority == DSAuthority(0)) {
+            return false;
+        } else {
+            return authority.canCall(src, address(this), sig);
+        }
+    }
+}
+
+contract DSStop is DSNote, DSAuth {
+    bool public stopped;
+
+    modifier stoppable {
+        require(!stopped, "ds-stop-is-stopped");
+        _;
+    }
+    function stop() public auth note {
+        stopped = true;
+    }
+    function start() public auth note {
+        stopped = false;
+    }
+
+}
+
+contract DSTokenBase is ERC20, DSMath {
+    uint256                                            _supply;
+    mapping (address => uint256)                       _balances;
+    mapping (address => mapping (address => uint256))  _approvals;
+
+    constructor(uint supply) public {
+        _balances[msg.sender] = supply;
+        _supply = supply;
+    }
+
+    function totalSupply() override public view returns (uint) {
+        return _supply;
+    }
+    function balanceOf(address src) override public view returns (uint) {
+        return _balances[src];
+    }
+    function allowance(address src, address guy) override public view returns (uint) {
+        return _approvals[src][guy];
+    }
+
+    function transfer(address dst, uint wad) override public returns (bool) {
+        return transferFrom(msg.sender, dst, wad);
+    }
+
+    function transferFrom(address src, address dst, uint wad)
+        override
+        virtual
+        public
+        returns (bool)
+    {
+        if (src != msg.sender) {
+            require(_approvals[src][msg.sender] >= wad, "ds-token-insufficient-approval");
+            _approvals[src][msg.sender] = sub(_approvals[src][msg.sender], wad);
+        }
+
+        require(_balances[src] >= wad, "ds-token-insufficient-balance");
+        _balances[src] = sub(_balances[src], wad);
+        _balances[dst] = add(_balances[dst], wad);
+
+        emit Transfer(src, dst, wad);
+
+        return true;
+    }
+
+    function approve(address guy, uint wad) virtual override public returns (bool) {
+        _approvals[msg.sender][guy] = wad;
+
+        emit Approval(msg.sender, guy, wad);
+
+        return true;
+    }
+}
+
 contract DSDelegateToken is DSTokenBase(0), DSStop {
     // --- Variables ---
     // @notice The coin's symbol
@@ -295,248 +537,6 @@ contract DSDelegateToken is DSTokenBase(0), DSStop {
         uint256 chainId;
         assembly { chainId := chainid() }
         return chainId;
-    }
-}
-
-contract DSMath {
-    function add(uint x, uint y) internal pure returns (uint z) {
-        require((z = x + y) >= x, "ds-math-add-overflow");
-    }
-    function sub(uint x, uint y) internal pure returns (uint z) {
-        require((z = x - y) <= x, "ds-math-sub-underflow");
-    }
-    function mul(uint x, uint y) internal pure returns (uint z) {
-        require(y == 0 || (z = x * y) / y == x, "ds-math-mul-overflow");
-    }
-
-    function min(uint x, uint y) internal pure returns (uint z) {
-        return x <= y ? x : y;
-    }
-    function max(uint x, uint y) internal pure returns (uint z) {
-        return x >= y ? x : y;
-    }
-    function imin(int x, int y) internal pure returns (int z) {
-        return x <= y ? x : y;
-    }
-    function imax(int x, int y) internal pure returns (int z) {
-        return x >= y ? x : y;
-    }
-
-    uint constant WAD = 10 ** 18;
-    uint constant RAY = 10 ** 27;
-
-    //rounds to zero if x*y < WAD / 2
-    function wmul(uint x, uint y) internal pure returns (uint z) {
-        z = add(mul(x, y), WAD / 2) / WAD;
-    }
-    //rounds to zero if x*y < WAD / 2
-    function rmul(uint x, uint y) internal pure returns (uint z) {
-        z = add(mul(x, y), RAY / 2) / RAY;
-    }
-    //rounds to zero if x*y < WAD / 2
-    function wdiv(uint x, uint y) internal pure returns (uint z) {
-        z = add(mul(x, WAD), y / 2) / y;
-    }
-    //rounds to zero if x*y < RAY / 2
-    function rdiv(uint x, uint y) internal pure returns (uint z) {
-        z = add(mul(x, RAY), y / 2) / y;
-    }
-
-    // This famous algorithm is called "exponentiation by squaring"
-    // and calculates x^n with x as fixed-point and n as regular unsigned.
-    //
-    // It's O(log n), instead of O(n) for naive repeated multiplication.
-    //
-    // These facts are why it works:
-    //
-    //  If n is even, then x^n = (x^2)^(n/2).
-    //  If n is odd,  then x^n = x * x^(n-1),
-    //   and applying the equation for even x gives
-    //    x^n = x * (x^2)^((n-1) / 2).
-    //
-    //  Also, EVM division is flooring and
-    //    floor[(n-1) / 2] = floor[n / 2].
-    //
-    function rpow(uint x, uint n) internal pure returns (uint z) {
-        z = n % 2 != 0 ? x : RAY;
-
-        for (n /= 2; n != 0; n /= 2) {
-            x = rmul(x, x);
-
-            if (n % 2 != 0) {
-                z = rmul(z, x);
-            }
-        }
-    }
-}
-
-abstract contract ERC20Events {
-    event Approval(address indexed src, address indexed guy, uint wad);
-    event Transfer(address indexed src, address indexed dst, uint wad);
-}
-
-abstract contract ERC20 is ERC20Events {
-    function totalSupply() virtual public view returns (uint);
-    function balanceOf(address guy) virtual public view returns (uint);
-    function allowance(address src, address guy) virtual public view returns (uint);
-
-    function approve(address guy, uint wad) virtual public returns (bool);
-    function transfer(address dst, uint wad) virtual public returns (bool);
-    function transferFrom(
-        address src, address dst, uint wad
-    ) virtual public returns (bool);
-}
-
-
-contract DSNote {
-    event LogNote(
-        bytes4   indexed  sig,
-        address  indexed  guy,
-        bytes32  indexed  foo,
-        bytes32  indexed  bar,
-        uint256           wad,
-        bytes             fax
-    ) anonymous;
-
-    modifier note {
-        bytes32 foo;
-        bytes32 bar;
-        uint256 wad;
-
-        assembly {
-            foo := calldataload(4)
-            bar := calldataload(36)
-            wad := callvalue()
-        }
-
-        _;
-
-        emit LogNote(msg.sig, msg.sender, foo, bar, wad, msg.data);
-    }
-}
-
-interface DSAuthority {
-    function canCall(
-        address src, address dst, bytes4 sig
-    ) external view returns (bool);
-}
-
-abstract contract DSAuthEvents {
-    event LogSetAuthority (address indexed authority);
-    event LogSetOwner     (address indexed owner);
-}
-
-contract DSAuth is DSAuthEvents {
-    DSAuthority  public  authority;
-    address      public  owner;
-
-    constructor() public {
-        owner = msg.sender;
-        emit LogSetOwner(msg.sender);
-    }
-
-    function setOwner(address owner_)
-        virtual
-        public
-        auth
-    {
-        owner = owner_;
-        emit LogSetOwner(owner);
-    }
-
-    function setAuthority(DSAuthority authority_)
-        virtual
-        public
-        auth
-    {
-        authority = authority_;
-        emit LogSetAuthority(address(authority));
-    }
-
-    modifier auth {
-        require(isAuthorized(msg.sender, msg.sig), "ds-auth-unauthorized");
-        _;
-    }
-
-    function isAuthorized(address src, bytes4 sig) virtual internal view returns (bool) {
-        if (src == address(this)) {
-            return true;
-        } else if (src == owner) {
-            return true;
-        } else if (authority == DSAuthority(0)) {
-            return false;
-        } else {
-            return authority.canCall(src, address(this), sig);
-        }
-    }
-}
-
-contract DSStop is DSNote, DSAuth {
-    bool public stopped;
-
-    modifier stoppable {
-        require(!stopped, "ds-stop-is-stopped");
-        _;
-    }
-    function stop() public auth note {
-        stopped = true;
-    }
-    function start() public auth note {
-        stopped = false;
-    }
-
-}
-
-contract DSTokenBase is ERC20, DSMath {
-    uint256                                            _supply;
-    mapping (address => uint256)                       _balances;
-    mapping (address => mapping (address => uint256))  _approvals;
-
-    constructor(uint supply) public {
-        _balances[msg.sender] = supply;
-        _supply = supply;
-    }
-
-    function totalSupply() override public view returns (uint) {
-        return _supply;
-    }
-    function balanceOf(address src) override public view returns (uint) {
-        return _balances[src];
-    }
-    function allowance(address src, address guy) override public view returns (uint) {
-        return _approvals[src][guy];
-    }
-
-    function transfer(address dst, uint wad) override public returns (bool) {
-        return transferFrom(msg.sender, dst, wad);
-    }
-
-    function transferFrom(address src, address dst, uint wad)
-        override
-        virtual
-        public
-        returns (bool)
-    {
-        if (src != msg.sender) {
-            require(_approvals[src][msg.sender] >= wad, "ds-token-insufficient-approval");
-            _approvals[src][msg.sender] = sub(_approvals[src][msg.sender], wad);
-        }
-
-        require(_balances[src] >= wad, "ds-token-insufficient-balance");
-        _balances[src] = sub(_balances[src], wad);
-        _balances[dst] = add(_balances[dst], wad);
-
-        emit Transfer(src, dst, wad);
-
-        return true;
-    }
-
-    function approve(address guy, uint wad) virtual override public returns (bool) {
-        _approvals[msg.sender][guy] = wad;
-
-        emit Approval(msg.sender, guy, wad);
-
-        return true;
     }
 }
 
